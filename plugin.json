@@ -1,0 +1,7 @@
+{
+    "$schema": "https://raw.githubusercontent.com/spora-ai/spora-core/main/plugin.schema.json",
+    "slug": "memories",
+    "description": "Persistent memory storage for agents and users. Ships the Memories admin panel + memory/global_memory tools.",
+    "class": "Spora\\Plugins\\Memories\\MemoriesPlugin",
+    "icon": "brain"
+}

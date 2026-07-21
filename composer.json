@@ -1,0 +1,50 @@
+{
+    "name": "spora-ai/spora-plugin-memories",
+    "description": "Persistent memory storage for agents and users — UI + memory/global_memory tools.",
+    "type": "spora-plugin",
+    "license": "MIT",
+    "version": "0.1.0",
+    "require": {
+        "php": "^8.4.1",
+        "spora-ai/spora-core": ">=0.12.0 <2.0.0",
+        "spora-ai/spora-plugin-memories-frontend": ">=0.1.0 <1.0.0"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.94",
+        "larastan/larastan": "^3.9",
+        "mockery/mockery": "^1.6",
+        "pestphp/pest": "^4.0",
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-mockery": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Spora\\Plugins\\Memories\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Spora\\Plugins\\Memories\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "analyse": "phpstan analyse --no-progress --memory-limit=512M",
+        "lint": "php-cs-fixer fix --dry-run --diff --no-interaction",
+        "format": "php-cs-fixer fix --no-interaction"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "spora-ai/installer": true
+        }
+    },
+    "repositories": [
+        { "type": "path", "url": "../spora-core", "options": { "symlink": true, "versions": { "spora-ai/spora-core": "0.12.x-dev" } } },
+        { "type": "path", "url": "../spora-plugin-memories-frontend", "options": { "symlink": true, "versions": { "spora-ai/spora-plugin-memories-frontend": "0.1.x-dev" } } }
+    ],
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

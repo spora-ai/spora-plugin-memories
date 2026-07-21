@@ -1,0 +1,10 @@
+/vendor/
+/.phpunit.cache/
+/.php-cs-fixer.cache/
+/coverage.xml
+/.idea/
+/.vscode/
+/.DS_Store
+/composer.phar
+/build/
+.phpstan-cache/
