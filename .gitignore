@@ -10,3 +10,4 @@
 /build/
 .phpstan-cache/
 /:memory:
+/plugins/
