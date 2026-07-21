@@ -113,7 +113,7 @@ jobs:
         run: ./vendor/bin/pest --coverage-clover=coverage.xml
 
       - name: Upload coverage.xml
-        uses: actions/upload-artifact@ea165f8d65b6b75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-report
           path: coverage.xml
@@ -148,7 +148,7 @@ jobs:
         # The artifact is missing when test/coverage jobs fail (e.g. v0.1.0
         # placeholder). The scanner still runs but without coverage data.
         continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5d7d6820020 # v4.3.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5d7c8093 # v4.3.0
         with:
           name: coverage-report
           path: .
