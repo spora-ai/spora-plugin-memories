@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a3341a0dd719bed4c4d6d27218237255",
+    "content-hash": "947bd3822d0b097ff89cbe511d9fdb0f",
     "packages": [
         {
             "name": "brick/math",
@@ -1464,16 +1464,16 @@
         },
         {
             "name": "laravel/serializable-closure",
-            "version": "v2.0.14",
+            "version": "v2.0.15",
             "source": {
                 "type": "git",
                 "url": "https://github.com/laravel/serializable-closure.git",
-                "reference": "97a77d2cc80578c28bccf97829af73db658ffb97"
+                "reference": "dccd8bcb851bb03fcc005df650b708b57cc52661"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/laravel/serializable-closure/zipball/97a77d2cc80578c28bccf97829af73db658ffb97",
-                "reference": "97a77d2cc80578c28bccf97829af73db658ffb97",
+                "url": "https://api.github.com/repos/laravel/serializable-closure/zipball/dccd8bcb851bb03fcc005df650b708b57cc52661",
+                "reference": "dccd8bcb851bb03fcc005df650b708b57cc52661",
                 "shasum": ""
             },
             "require": {
@@ -1521,7 +1521,7 @@
                 "issues": "https://github.com/laravel/serializable-closure/issues",
                 "source": "https://github.com/laravel/serializable-closure"
             },
-            "time": "2026-06-24T18:49:39+00:00"
+            "time": "2026-07-21T16:49:22+00:00"
         },
         {
             "name": "league/html-to-markdown",
@@ -2488,11 +2488,17 @@
         },
         {
             "name": "spora-ai/spora-core",
-            "version": "0.12.x-dev",
+            "version": "dev-feat/extract-memories-plugin",
+            "source": {
+                "type": "git",
+                "url": "git@github.com:spora-ai/spora-core.git",
+                "reference": "e632d2a6a7d3055e24d9494488f63b08dfb1a31c"
+            },
             "dist": {
-                "type": "path",
-                "url": "../spora-core",
-                "reference": "e55be71e119afc3694a74e39feea5ec7f3a99a83"
+                "type": "zip",
+                "url": "https://api.github.com/repos/spora-ai/spora-core/zipball/e632d2a6a7d3055e24d9494488f63b08dfb1a31c",
+                "reference": "e632d2a6a7d3055e24d9494488f63b08dfb1a31c",
+                "shasum": ""
             },
             "require": {
                 "chriskonnertz/string-calc": "^2.0",
@@ -2522,6 +2528,7 @@
                 "php-di/php-di": "^7.1",
                 "psr/log": "^3.0",
                 "spora-ai/installer": "^1.1",
+                "spora-ai/spora-plugin-tavily": "^0.3.2",
                 "symfony/console": "^8.0",
                 "symfony/http-client": "^8.0",
                 "symfony/http-foundation": "^8.0",
@@ -2614,18 +2621,20 @@
                 "MIT"
             ],
             "description": "A portable, zero-configuration AI agent orchestration platform that runs on any shared host (cPanel/FTP) without system dependencies beyond PHP 8.4+.",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "time": "2026-07-21T16:53:49+00:00"
         },
         {
             "name": "spora-ai/spora-plugin-memories-frontend",
-            "version": "0.1.x-dev",
+            "version": "dev-feat/initial-implementation",
+            "source": {
+                "type": "git",
+                "url": "git@github.com:spora-ai/spora-plugin-memories-frontend.git",
+                "reference": "c620728b782ca5267cb46d7dee3e3c70904cc7ce"
+            },
             "dist": {
-                "type": "path",
-                "url": "../spora-plugin-memories-frontend",
-                "reference": "40813b7eee3e0fc576a0b65bebbcfbf6ea886e78"
+                "type": "tar",
+                "url": "https://github.com/spora-ai/spora-plugin-memories-frontend/releases/download/v0.1.0/spora-plugin-memories-frontend-v0.1.0.tar.gz",
+                "reference": "c620728b782ca5267cb46d7dee3e3c70904cc7ce"
             },
             "require": {
                 "php": "^8.4.1"
@@ -2664,10 +2673,49 @@
                 "MIT"
             ],
             "description": "Pre-built Vue SPA for the Spora memories admin panel. Delivered as type `spora-plugin-frontend`; the host SPA lazy-loads it via /plugins/spora-plugin-memories-frontend/main.js.",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "time": "2026-07-21T16:59:24+00:00"
+        },
+        {
+            "name": "spora-ai/spora-plugin-tavily",
+            "version": "v0.3.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/spora-ai/spora-plugin-tavily.git",
+                "reference": "de5f9d17a82186302a17c1fa6e80f26867984414"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/spora-ai/spora-plugin-tavily/zipball/de5f9d17a82186302a17c1fa6e80f26867984414",
+                "reference": "de5f9d17a82186302a17c1fa6e80f26867984414",
+                "shasum": ""
+            },
+            "require": {
+                "php": "^8.4.1",
+                "spora-ai/spora-core": ">=0.3.0 <1.0.0"
+            },
+            "require-dev": {
+                "friendsofphp/php-cs-fixer": "^3.94",
+                "mockery/mockery": "^1.6",
+                "pestphp/pest": "^4.0",
+                "phpstan/phpstan": "^2.1",
+                "phpstan/phpstan-mockery": "^2.0"
+            },
+            "type": "spora-plugin",
+            "autoload": {
+                "psr-4": {
+                    "Spora\\Plugins\\Tavily\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "description": "Tavily web search for Spora agents.",
+            "support": {
+                "issues": "https://github.com/spora-ai/spora-plugin-tavily/issues",
+                "source": "https://github.com/spora-ai/spora-plugin-tavily/tree/v0.3.2"
+            },
+            "time": "2026-07-08T11:47:06+00:00"
         },
         {
             "name": "symfony/clock",
@@ -11036,9 +11084,25 @@
             "time": "2026-06-15T15:31:57+00:00"
         }
     ],
-    "aliases": [],
+    "aliases": [
+        {
+            "package": "spora-ai/spora-core",
+            "version": "dev-feat/extract-memories-plugin",
+            "alias": "0.12.0",
+            "alias_normalized": "0.12.0.0"
+        },
+        {
+            "package": "spora-ai/spora-plugin-memories-frontend",
+            "version": "dev-feat/initial-implementation",
+            "alias": "0.1.0",
+            "alias_normalized": "0.1.0.0"
+        }
+    ],
     "minimum-stability": "dev",
-    "stability-flags": {},
+    "stability-flags": {
+        "spora-ai/spora-core": 20,
+        "spora-ai/spora-plugin-memories-frontend": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

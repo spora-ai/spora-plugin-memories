@@ -37,7 +37,12 @@ jobs:
           tools: composer
 
       - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+        # No --prefer-dist: spora-core and spora-plugin-memories-frontend ship
+        # via vcs + branch alias (composer.json#repositories), and the frontend's
+        # composer.json declares a `dist` URL pointing at a release tag that
+        # doesn't exist yet. `config.preferred-install` in composer.json forces
+        # source (git clone) for both Spora packages; everything else uses dist.
+        run: composer install --no-interaction
 
       - name: Run Pest
         run: ./vendor/bin/pest
@@ -57,7 +62,7 @@ jobs:
           tools: composer
 
       - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+        run: composer install --no-interaction
 
       - name: Run PHPStan
         run: ./vendor/bin/phpstan analyse --no-progress
@@ -77,7 +82,7 @@ jobs:
           tools: composer
 
       - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+        run: composer install --no-interaction
 
       - name: Check code style
         # Same ruleset as Spora core's .php-cs-fixer.php so plugin style matches host.
@@ -102,7 +107,7 @@ jobs:
           tools: composer
 
       - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+        run: composer install --no-interaction
 
       - name: Generate clover coverage report
         run: ./vendor/bin/pest --coverage-clover=coverage.xml
