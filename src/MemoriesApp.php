@@ -9,17 +9,8 @@ use Spora\Apps\VueAppInterface;
 /**
  * Admin-panel metadata for the Memories feature.
  *
- * Implementing {@see VueAppInterface} (instead of {@see \Spora\Apps\AppInterface})
- * opts the app into the host SPA's generic `/apps/:appName` loader, which
- * lazy-imports `/plugins/<slug>/<entry>` and mounts the IIFE bundle inside the
- * shared layout. The slug returned by {@see name()} (`memories`) is the host
- * SPA's route key; it is independent of the Composer package name
- * (`spora-ai/spora-plugin-memories`) and of the on-disk bundle directory
- * (which is derived from the *frontend* package's name by the
- * `SporaPluginFrontendInstaller` in `spora-installer`).
- *
- * The {@see entry()} value (`main.js`) MUST match the frontend bundle's
- * `build.lib.fileName()` from `spora-plugin-memories-frontend/vite.config.ts`.
+ * The host loads the frontend bundle from the plugin slug and entry filename.
+ * The entry must match the frontend bundle's `build.lib.fileName()` value.
  */
 final class MemoriesApp implements VueAppInterface
 {

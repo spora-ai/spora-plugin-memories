@@ -37,7 +37,7 @@ jobs:
           tools: composer
 
       - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+        run: composer install --no-interaction
 
       - name: Run Pest
         run: ./vendor/bin/pest
@@ -57,7 +57,7 @@ jobs:
           tools: composer
 
       - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+        run: composer install --no-interaction
 
       - name: Run PHPStan
         run: ./vendor/bin/phpstan analyse --no-progress
@@ -77,7 +77,7 @@ jobs:
           tools: composer
 
       - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+        run: composer install --no-interaction
 
       - name: Check code style
         # Same ruleset as Spora core's .php-cs-fixer.php so plugin style matches host.
@@ -102,13 +102,13 @@ jobs:
           tools: composer
 
       - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+        run: composer install --no-interaction
 
       - name: Generate clover coverage report
-        run: ./vendor/bin/pest --coverage-clover=coverage.xml
+        run: ./vendor/bin/pest --coverage-clover=coverage.xml --coverage-filter=src
 
       - name: Upload coverage.xml
-        uses: actions/upload-artifact@ea165f8d65b6b75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-report
           path: coverage.xml
@@ -143,12 +143,12 @@ jobs:
         # The artifact is missing when test/coverage jobs fail (e.g. v0.1.0
         # placeholder). The scanner still runs but without coverage data.
         continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5d7d6820020 # v4.3.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: coverage-report
           path: .
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6.0.0
+        uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

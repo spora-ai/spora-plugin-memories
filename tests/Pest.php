@@ -25,7 +25,9 @@ require_once BASE_PATH . '/vendor/autoload.php';
 // delight-im/auth v9.0.0 uses implicit nullable types (e.g. `callable $x = null`)
 // which PHP 8.4+ deprecates. The warnings are harmless — nothing breaks at
 // runtime — so we silence them rather than patching vendor.
-set_error_handler(static function (int $errno, string $_errstr, string $errfile): bool {
+set_error_handler(static function (...$handlerArgs): bool {
+    [$errno, , $errfile] = $handlerArgs;
+
     if ($errno === E_DEPRECATED && str_contains($errfile, \DIRECTORY_SEPARATOR . 'delight-im' . \DIRECTORY_SEPARATOR)) {
         return true;
     }
