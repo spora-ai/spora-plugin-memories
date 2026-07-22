@@ -110,7 +110,11 @@ jobs:
         run: composer install --no-interaction
 
       - name: Generate clover coverage report
-        run: ./vendor/bin/pest --coverage-clover=coverage.xml
+        # Pest 4.x refuses to write coverage data without an explicit filter
+        # (exit 1 + "WARN No filter is configured, code coverage will not
+        # be processed" warning). Restrict to src/ so Eloquent test
+        # fixtures under tests/Fixtures don't pollute the % numbers.
+        run: ./vendor/bin/pest --coverage-clover=coverage.xml --coverage-filter=src
 
       - name: Upload coverage.xml
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -148,12 +152,15 @@ jobs:
         # The artifact is missing when test/coverage jobs fail (e.g. v0.1.0
         # placeholder). The scanner still runs but without coverage data.
         continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5d7c8093 # v4.3.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: coverage-report
           path: .
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6.0.0
+        # Pinned to v8.2.0 — the recommended successor to the deprecated
+        # sonarsource/sonarcloud-github-action. v6.0.0 fails on PR analysis
+        # because the image is no longer published for that tag.
+        uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
