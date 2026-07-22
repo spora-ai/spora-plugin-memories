@@ -25,7 +25,7 @@ require_once BASE_PATH . '/vendor/autoload.php';
 // delight-im/auth v9.0.0 uses implicit nullable types (e.g. `callable $x = null`)
 // which PHP 8.4+ deprecates. The warnings are harmless — nothing breaks at
 // runtime — so we silence them rather than patching vendor.
-set_error_handler(static function (...$handlerArgs): bool { // NOSONAR (php:S1172) — set_error_handler requires the closure signature; using variadic to drop unused named params
+set_error_handler(static function (...$handlerArgs): bool {
     [$errno, , $errfile] = $handlerArgs;
 
     if ($errno === E_DEPRECATED && str_contains($errfile, \DIRECTORY_SEPARATOR . 'delight-im' . \DIRECTORY_SEPARATOR)) {
@@ -116,7 +116,6 @@ uses()
         // here so test code can SELECT/INSERT against `memories`.
         $migrationPath = __DIR__ . '/../database/migrations';
         foreach (glob($migrationPath . '/*.php') ?: [] as $migrationFile) {
-            // NOSONAR (php:S2003) — migration returns an anonymous-class instance; `require_once` would skip on the second test in the same process and break test isolation.
             $migration = require $migrationFile;
             if (is_object($migration) && method_exists($migration, 'up')) {
                 $migration->up();
