@@ -62,7 +62,7 @@ describe('MemoryController::index', function (): void {
         expect($body['data']['memories'])->toBe([]);
     });
 });
- // NOSONAR (php:S1192) — URI literal in test, intentionally inline
+// NOSONAR (php:S1192) — URI literal in test, intentionally inline
 describe('MemoryController::store', function (): void {
     test('returns 201 with the created memory on success', function (): void {
         [$controller, $authService] = makeMemController();
@@ -70,7 +70,7 @@ describe('MemoryController::store', function (): void {
 
         $request = jsonRequest('POST', MEM_API, ['name' => 'New Memory', 'content' => 'body']);
         $response = $controller->store($request);
- // NOSONAR (php:S1192) — test description string
+        // NOSONAR (php:S1192) — test description string
         expect($response->getStatusCode())->toBe(Response::HTTP_CREATED);
         $body = json_decode($response->getContent(), true);
         expect($body['data']['memory']['name'])->toBe('New Memory');
@@ -117,7 +117,7 @@ describe('MemoryController::show', function (): void {
         $request = new Request();
         $request->attributes->set('id', $created['memory']['id']);
         $response = $controller->show($request);
- // NOSONAR (php:S1192) — test description string
+        // NOSONAR (php:S1192) — test description string
         expect($response->getStatusCode())->toBe(Response::HTTP_OK);
         $body = json_decode($response->getContent(), true);
         expect($body['data']['memory']['name'])->toBe('Show Me');

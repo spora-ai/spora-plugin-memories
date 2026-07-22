@@ -79,7 +79,7 @@ describe('AgentMemoryController::store', function (): void {
         $request = jsonRequest('POST', "/api/v1/agents/{$agentId}/memories", ['name' => 'New', 'content' => 'c']);
         $request->attributes->set('agentId', $agentId);
         $response = $controller->store($request);
- // NOSONAR (php:S1192) — test description string, intentionally inline
+        // NOSONAR (php:S1192) — test description string, intentionally inline
         expect($response->getStatusCode())->toBe(Response::HTTP_CREATED);
     });
 
@@ -127,7 +127,7 @@ describe('AgentMemoryController::show', function (): void {
         $request->attributes->set('agentId', $agentId);
         $request->attributes->set('memoryId', $created['memory']['id']);
         $response = $controller->show($request);
- // NOSONAR (php:S1192) — test description string, intentionally inline
+        // NOSONAR (php:S1192) — test description string, intentionally inline
         expect($response->getStatusCode())->toBe(Response::HTTP_OK);
     });
 
