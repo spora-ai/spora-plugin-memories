@@ -11,6 +11,11 @@ use Spora\Plugins\Memories\Services\MemoryService;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
+
+const AGENT_MEM_CONTENT_TYPE_JSON = 'application/json';
+const AGENT_MEM_INVALID_JSON_BODY = 'not json';
+const AGENT_MEM_TEST_400_INVALID_JSON = 'returns 400 on invalid JSON';
+const AGENT_MEM_TEST_404_UNKNOWN_MEMORY = 'returns 404 for unknown memory';
 function makeAgentMemController(?AuthService $authService = null): array
 {
     $authService = $authService ?? bootAuthLayer();
@@ -79,11 +84,11 @@ describe('AgentMemoryController::store', function (): void {
         expect($response->getStatusCode())->toBe(Response::HTTP_CREATED);
     });
 
-    test('returns 400 on invalid JSON', function (): void {
+    test(AGENT_MEM_TEST_400_INVALID_JSON, function (): void {
         [$controller, $authService] = makeAgentMemController();
         [, $agentId] = createAgentMemUser($authService, 'store400@example.com');
 
-        $request = Request::create("/api/v1/agents/{$agentId}/memories", 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], 'not json');
+        $request = Request::create("/api/v1/agents/{$agentId}/memories", 'POST', [], [], [], ['CONTENT_TYPE' => AGENT_MEM_CONTENT_TYPE_JSON], AGENT_MEM_INVALID_JSON_BODY);
         $request->attributes->set('agentId', $agentId);
         $response = $controller->store($request);
 
@@ -127,7 +132,7 @@ describe('AgentMemoryController::show', function (): void {
         expect($response->getStatusCode())->toBe(Response::HTTP_OK);
     });
 
-    test('returns 404 for unknown memory', function (): void {
+    test(AGENT_MEM_TEST_404_UNKNOWN_MEMORY, function (): void {
         [$controller, $authService] = makeAgentMemController();
         [, $agentId] = createAgentMemUser($authService, 'show404@example.com');
 
@@ -154,7 +159,7 @@ describe('AgentMemoryController::update', function (): void {
         expect($response->getStatusCode())->toBe(Response::HTTP_OK);
     });
 
-    test('returns 404 for unknown memory', function (): void {
+    test(AGENT_MEM_TEST_404_UNKNOWN_MEMORY, function (): void {
         [$controller, $authService] = makeAgentMemController();
         [, $agentId] = createAgentMemUser($authService, 'update404@example.com');
 
@@ -166,11 +171,11 @@ describe('AgentMemoryController::update', function (): void {
         expect($response->getStatusCode())->toBe(Response::HTTP_NOT_FOUND);
     });
 
-    test('returns 400 on invalid JSON', function (): void {
+    test(AGENT_MEM_TEST_400_INVALID_JSON, function (): void {
         [$controller, $authService] = makeAgentMemController();
         [, $agentId] = createAgentMemUser($authService, 'updatebad@example.com');
 
-        $request = Request::create("/api/v1/agents/{$agentId}/memories/1", 'PUT', [], [], [], ['CONTENT_TYPE' => 'application/json'], 'not json');
+        $request = Request::create("/api/v1/agents/{$agentId}/memories/1", 'PUT', [], [], [], ['CONTENT_TYPE' => AGENT_MEM_CONTENT_TYPE_JSON], AGENT_MEM_INVALID_JSON_BODY);
         $request->attributes->set('agentId', $agentId);
         $request->attributes->set('memoryId', 1);
         $response = $controller->update($request);
@@ -195,7 +200,7 @@ describe('AgentMemoryController::destroy', function (): void {
         expect($body['data']['deleted'])->toBeTrue();
     });
 
-    test('returns 404 for unknown memory', function (): void {
+    test(AGENT_MEM_TEST_404_UNKNOWN_MEMORY, function (): void {
         [$controller, $authService] = makeAgentMemController();
         [, $agentId] = createAgentMemUser($authService, 'destroy404@example.com');
 
@@ -222,11 +227,11 @@ describe('AgentMemoryController::reorder', function (): void {
         expect($response->getStatusCode())->toBe(Response::HTTP_OK);
     });
 
-    test('returns 400 on invalid JSON', function (): void {
+    test(AGENT_MEM_TEST_400_INVALID_JSON, function (): void {
         [$controller, $authService] = makeAgentMemController();
         [, $agentId] = createAgentMemUser($authService, 'reorder400@example.com');
 
-        $request = Request::create("/api/v1/agents/{$agentId}/memories/reorder", 'PATCH', [], [], [], ['CONTENT_TYPE' => 'application/json'], 'not json');
+        $request = Request::create("/api/v1/agents/{$agentId}/memories/reorder", 'PATCH', [], [], [], ['CONTENT_TYPE' => AGENT_MEM_CONTENT_TYPE_JSON], AGENT_MEM_INVALID_JSON_BODY);
         $request->attributes->set('agentId', $agentId);
         $response = $controller->reorder($request);
 
