@@ -15,10 +15,6 @@ const IT_AGENT_NOT_FOUND = 'returns null when agent does not exist';
 const IT_MEMORY_NOT_FOUND = 'returns null when memory does not exist';
 
 
-//
-// Shared helpers
-//
-
 function makeMemoryService(): MemoryService
 {
     return new MemoryService();
@@ -45,10 +41,6 @@ function createUserWithAgent(string $email = 'service@example.com'): array
 
     return [$userId, $agentId];
 }
-
-//
-// listGlobalMemories
-//
 
 
 describe('listGlobalMemories', function (): void {
@@ -131,10 +123,6 @@ describe('listGlobalMemories', function (): void {
     });
 });
 
-//
-// listAgentMemories
-//
-
 describe('listAgentMemories', function (): void {
 
     it(IT_AGENT_NOT_FOUND, function (): void {
@@ -173,10 +161,6 @@ describe('listAgentMemories', function (): void {
             ->and($result[0]['name'])->toBe('memory_for_agent1');
     });
 });
-
-//
-// createGlobalMemory
-//
 
 describe('createGlobalMemory', function (): void {
 
@@ -241,10 +225,6 @@ describe('createGlobalMemory', function (): void {
             ->toThrow(MemoryValidationException::class, 'name is required');
     });
 });
-
-//
-// createAgentMemory
-//
 
 describe('createAgentMemory', function (): void {
 

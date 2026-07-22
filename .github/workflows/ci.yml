@@ -37,11 +37,6 @@ jobs:
           tools: composer
 
       - name: Composer install
-        # No --prefer-dist: spora-core and spora-plugin-memories-frontend ship
-        # via vcs + branch alias (composer.json#repositories), and the frontend's
-        # composer.json declares a `dist` URL pointing at a release tag that
-        # doesn't exist yet. `config.preferred-install` in composer.json forces
-        # source (git clone) for both Spora packages; everything else uses dist.
         run: composer install --no-interaction
 
       - name: Run Pest
@@ -110,10 +105,6 @@ jobs:
         run: composer install --no-interaction
 
       - name: Generate clover coverage report
-        # Pest 4.x refuses to write coverage data without an explicit filter
-        # (exit 1 + "WARN No filter is configured, code coverage will not
-        # be processed" warning). Restrict to src/ so Eloquent test
-        # fixtures under tests/Fixtures don't pollute the % numbers.
         run: ./vendor/bin/pest --coverage-clover=coverage.xml --coverage-filter=src
 
       - name: Upload coverage.xml
@@ -158,9 +149,6 @@ jobs:
           path: .
 
       - name: SonarCloud Scan
-        # Pinned to v8.2.0 — the recommended successor to the deprecated
-        # sonarsource/sonarcloud-github-action. v6.0.0 fails on PR analysis
-        # because the image is no longer published for that tag.
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

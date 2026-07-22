@@ -13,8 +13,6 @@ const MEM_ERR_NAME_REQUIRED = 'name is required';
 const MEM_ERR_NOT_FOUND = 'not found';
 
 
-// Shared helpers
-
 /**
  * Create a user and agent, return [userId, agentId].
  */
@@ -46,9 +44,6 @@ function getToolName(object $tool): string
     $attr = $ref->getAttributes(Tool::class)[0];
     return $attr->newInstance()->name;
 }
-
-// AgentMemoryTool
-
 
 describe('AgentMemoryTool::tool metadata', function (): void {
 
