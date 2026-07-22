@@ -60,6 +60,14 @@ describe('AgentMemoryTool::tool metadata', function (): void {
             ->toContain('my_memory');
     });
 
+    it('only delete requires approval; list/get/save auto-approve', function (): void {
+        $tool = new AgentMemoryTool();
+
+        expect($tool->requiresApprovalByDefault('list'))->toBeFalse()
+            ->and($tool->requiresApprovalByDefault('get'))->toBeFalse()
+            ->and($tool->requiresApprovalByDefault('save'))->toBeFalse()
+            ->and($tool->requiresApprovalByDefault('delete'))->toBeTrue();
+    });
 });
 
 describe('AgentMemoryTool::list action', function (): void {
@@ -330,6 +338,14 @@ describe('GlobalMemoryTool::tool metadata', function (): void {
             ->toContain('my_memory');
     });
 
+    it('only delete requires approval; list/get/save auto-approve', function (): void {
+        $tool = new GlobalMemoryTool();
+
+        expect($tool->requiresApprovalByDefault('list'))->toBeFalse()
+            ->and($tool->requiresApprovalByDefault('get'))->toBeFalse()
+            ->and($tool->requiresApprovalByDefault('save'))->toBeFalse()
+            ->and($tool->requiresApprovalByDefault('delete'))->toBeTrue();
+    });
 });
 
 describe('GlobalMemoryTool::list action', function (): void {
