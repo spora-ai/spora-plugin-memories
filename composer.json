@@ -1,13 +1,13 @@
 {
     "name": "spora-ai/spora-plugin-memories",
-    "description": "Persistent memory storage for agents and users — UI + memory/global_memory tools.",
+    "description": "Persistent memory storage for agents and users \u2014 UI + memory/global_memory tools.",
     "type": "spora-plugin",
     "license": "MIT",
     "version": "0.1.0",
     "require": {
         "php": "^8.4.1",
-        "spora-ai/spora-core": "dev-feat/extract-memories-plugin as 0.12.0",
-        "spora-ai/spora-plugin-memories-frontend": "dev-feat/initial-implementation as 0.1.0"
+        "spora-ai/spora-core": "dev-main as 0.12.0",
+        "spora-ai/spora-plugin-memories-frontend": "dev-main as 0.1.0"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.94",
