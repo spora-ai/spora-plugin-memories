@@ -16,25 +16,25 @@ if (!defined('Larastan\Larastan\LARAVEL_VERSION')) {
 
 // Laravel-style helpers that Eloquent / Larastan expect during analysis.
 if (!function_exists('config_path')) {
-    /** @SuppressWarnings("php:S100") — Laravel convention: snake_case path helper. */
+    // NOSONAR — Laravel convention: snake_case path helper (php:S100)
     function config_path(string $path = ''): string {
         return BASE_PATH . '/config' . ($path ? DIRECTORY_SEPARATOR . $path : '');
     }
 }
 if (!function_exists('app_path')) {
-    /** @SuppressWarnings("php:S100") — Laravel convention: snake_case path helper. */
+    // NOSONAR — Laravel convention: snake_case path helper (php:S100)
     function app_path(string $path = ''): string {
         return BASE_PATH . '/app' . ($path ? DIRECTORY_SEPARATOR . $path : '');
     }
 }
 if (!function_exists('storage_path')) {
-    /** @SuppressWarnings("php:S100") — Laravel convention: snake_case path helper. */
+    // NOSONAR — Laravel convention: snake_case path helper (php:S100)
     function storage_path(string $path = ''): string {
         return BASE_PATH . '/storage' . ($path ? DIRECTORY_SEPARATOR . $path : '');
     }
 }
 if (!function_exists('database_path')) {
-    /** @SuppressWarnings("php:S100") — Laravel convention: snake_case path helper. */
+    // NOSONAR — Laravel convention: snake_case path helper (php:S100)
     function database_path(string $path = ''): string {
         return BASE_PATH . '/database' . ($path ? DIRECTORY_SEPARATOR . $path : '');
     }

@@ -116,7 +116,7 @@ uses()
         // here so test code can SELECT/INSERT against `memories`.
         $migrationPath = __DIR__ . '/../database/migrations';
         foreach (glob($migrationPath . '/*.php') ?: [] as $migrationFile) {
-            /** @SuppressWarnings("php:S2003") — migration returns an anonymous-class instance; `require_once` would skip on the second test in the same process and break test isolation. */
+            // NOSONAR (php:S2003) — migration returns an anonymous-class instance; `require_once` would skip on the second test in the same process and break test isolation.
             $migration = require $migrationFile;
             if (is_object($migration) && method_exists($migration, 'up')) {
                 $migration->up();
