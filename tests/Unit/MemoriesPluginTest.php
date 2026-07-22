@@ -7,23 +7,19 @@ use Spora\Plugins\Memories\Http\AgentMemoryController;
 use Spora\Plugins\Memories\Http\MemoryController;
 use Spora\Plugins\Memories\MemoriesApp;
 use Spora\Plugins\Memories\MemoriesPlugin;
-use Spora\Plugins\Memories\Services\MemoryService;
 use Spora\Plugins\Memories\Services\MemoryServiceInterface;
 use Spora\Plugins\Memories\Tools\AgentMemoryTool;
 use Spora\Plugins\Memories\Tools\GlobalMemoryTool;
 
-it('advertises the plugin as "Memories"', function (): void {
-    // The default AbstractPlugin::getName() would return "Memories" via reflection
-    // on the class short name; we still override it explicitly so the value is
-    // greppable and decoupled from the FQCN.
+it('advertises the plugin as the app\'s display name', function (): void {
     $plugin = new MemoriesPlugin();
 
-    expect($plugin->getName())->toBe('Memories');
+    // Derived from MemoriesApp::displayName() so the plugin name and the
+    // navbar label can't drift apart.
+    expect($plugin->getName())->toBe((new MemoriesApp())->displayName());
 });
 
 it('contributes exactly one admin app', function (): void {
-    // Lock the count so a future change that silently adds a second app surfaces
-    // in tests instead of silently growing the operator's navbar.
     $plugin = new MemoriesPlugin();
 
     expect($plugin->apps())->toHaveCount(1);
@@ -68,13 +64,13 @@ it('the migrations directory ships the slug-prefixed create-table migration', fu
     expect($files)->not->toBeEmpty();
 });
 
-it('ships an agent template at agent-templates/memories-assistant.json', function (): void {
+it('ships an agent template at agent-templates/assistant.json', function (): void {
     $plugin = new MemoriesPlugin();
 
     $paths = $plugin->agentTemplatePaths();
     expect($paths)->toHaveCount(1);
 
-    $files = glob($paths[0] . '/memories-assistant.json') ?: [];
+    $files = glob($paths[0] . '/assistant.json') ?: [];
     expect($files)->not->toBeEmpty();
 });
 
@@ -93,10 +89,6 @@ it('register() wires MemoryServiceInterface -> MemoryService autowire', function
 
     $container = $builder->build();
 
-    // `has()` resolves the interface-name binding to the underlying autowire definition
-    // without trying to instantiate MemoryService (which depends on AuthService etc. that
-    // the unit-test container doesn't fully wire). The point of the assertion is that the
-    // binding is in place — a missing binding would surface as `has() === false`.
     expect($container->has(MemoryServiceInterface::class))->toBeTrue();
     expect($container->has(MemoryController::class))->toBeTrue();
     expect($container->has(AgentMemoryController::class))->toBeTrue();

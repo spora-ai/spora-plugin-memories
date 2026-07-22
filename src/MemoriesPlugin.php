@@ -17,44 +17,19 @@ use Spora\Plugins\Memories\Tools\AgentMemoryTool;
 use Spora\Plugins\Memories\Tools\GlobalMemoryTool;
 
 /**
- * Plugin entry point for the Memories feature. Extending {@see AbstractPlugin}
- * (instead of implementing {@see \Spora\Plugins\PluginInterface} directly) means
- * we only override the hooks we actually use; every other extension point
- * inherits its no-op default.
+ * Plugin entry point for the Memories feature.
  *
- * Plugin contract wiring (see §Plugin contract wiring in the implementation plan):
- *
- * - {@see apps()} contributes {@see MemoriesApp} (a {@see \Spora\Apps\VueAppInterface}).
- *   The host AppRegistry merges this in at container-build time, so the navbar
- *   picks up the Memories tile via `GET /api/v1/apps`.
- * - {@see tools()} contributes the two LLM-callable tools `memory` (agent-scoped)
- *   and `global_memory` (cross-agent, per user).
- * - {@see register()} binds the service-interface → concrete-class autowire and
- *   the two controllers via `$builder->addDefinitions([...])`. PHP-DI's autowire
- *   resolves every ctor argument against existing container bindings, so adding
- *   `MemoryController::class => autowire()` is enough — no explicit constructor
- *   parameters are needed.
- * - {@see routes()} registers the 12 `/api/v1/memories*` endpoints behind
- *   {@see AuthMiddleware} + {@see CsrfMiddleware} (same chain as the rest of
- *   spora-core). The plugin's routes are added per-request after the host's
- *   `RouteDefinitions::register()`, so they are visible from the same dispatcher.
- *
- * Schema lifecycle:
- *
- * - {@see schemaVersion()} returns 1 so that {@see \Spora\Core\DatabaseSchemaInstaller}
- *   sees this plugin as migration-bearing. The `memories` migration file is
- *   prefixed with the plugin slug (`memories_000001_*`) per the filename contract
- *   the installer enforces via `validateMigrationFilenames()`.
- * - {@see migrationsPath()} returns the bundled `database/migrations/` directory.
- * - {@see agentTemplatePaths()} returns the bundled `agent-templates/` directory
- *   so the {@see \Spora\AgentTemplates\AgentTemplateScanner} picks up
- *   `memories-assistant.json` on every boot.
+ * Contributes one admin app (MemoriesApp), two LLM-callable tools
+ * (`memory` agent-scoped, `global_memory` user-scoped), 12 REST routes
+ * under `/api/v1/memories*`, DI bindings for the service and both
+ * controllers, the `memories` migration, and the `memories-assistant`
+ * agent template.
  */
 final class MemoriesPlugin extends AbstractPlugin
 {
     public function getName(): string
     {
-        return 'Memories';
+        return (new MemoriesApp())->displayName();
     }
 
     /**
