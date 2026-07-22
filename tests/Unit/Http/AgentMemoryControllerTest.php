@@ -11,7 +11,6 @@ use Spora\Plugins\Memories\Services\MemoryService;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-
 const AGENT_MEM_CONTENT_TYPE_JSON = 'application/json';
 const AGENT_MEM_INVALID_JSON_BODY = 'not json';
 const AGENT_MEM_TEST_400_INVALID_JSON = 'returns 400 on invalid JSON';

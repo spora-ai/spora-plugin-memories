@@ -10,7 +10,6 @@ use Spora\Plugins\Memories\Services\MemoryService;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-
 const MEM_API               = '/api/v1/memories';
 const MEM_REORDER_API       = '/api/v1/memories/reorder';
 const MEM_CONTENT_TYPE_JSON = 'application/json';
