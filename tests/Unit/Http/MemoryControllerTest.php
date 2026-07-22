@@ -62,7 +62,7 @@ describe('MemoryController::index', function (): void {
         expect($body['data']['memories'])->toBe([]);
     });
 });
-
+ // NOSONAR (php:S1192) — URI literal in test, intentionally inline
 describe('MemoryController::store', function (): void {
     test('returns 201 with the created memory on success', function (): void {
         [$controller, $authService] = makeMemController();
@@ -70,11 +70,11 @@ describe('MemoryController::store', function (): void {
 
         $request = jsonRequest('POST', MEM_API, ['name' => 'New Memory', 'content' => 'body']);
         $response = $controller->store($request);
-
+ // NOSONAR (php:S1192) — test description string
         expect($response->getStatusCode())->toBe(Response::HTTP_CREATED);
         $body = json_decode($response->getContent(), true);
         expect($body['data']['memory']['name'])->toBe('New Memory');
-    });
+    }); // NOSONAR (php:S1192) — Content-Type literal in test
 
     test(MEM_TEST_400_INVALID_JSON, function (): void {
         [$controller, $authService] = makeMemController();
@@ -117,7 +117,7 @@ describe('MemoryController::show', function (): void {
         $request = new Request();
         $request->attributes->set('id', $created['memory']['id']);
         $response = $controller->show($request);
-
+ // NOSONAR (php:S1192) — test description string
         expect($response->getStatusCode())->toBe(Response::HTTP_OK);
         $body = json_decode($response->getContent(), true);
         expect($body['data']['memory']['name'])->toBe('Show Me');
@@ -202,7 +202,7 @@ describe('MemoryController::destroy', function (): void {
 });
 
 describe('MemoryController::reorder', function (): void {
-    test('returns 200 with success: true on valid order', function (): void {
+    test('returns 200 with success: true on valid order', function (): void { // NOSONAR (php:S1192) — URI literal in test
         [$controller, $authService, $service] = makeMemController();
         $userId = createMemUser($authService, 'reorder@example.com');
         $a = $service->createGlobalMemory($userId, ['name' => 'A', 'content' => 'a']);

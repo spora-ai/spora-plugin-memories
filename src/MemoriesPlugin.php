@@ -52,8 +52,8 @@ use Spora\Plugins\Memories\Tools\GlobalMemoryTool;
  */
 final class MemoriesPlugin extends AbstractPlugin
 {
-    private const ROUTE_MEMORY_ITEM       = '/api/v1/memories/{id}';
-    private const ROUTE_AGENT_MEMORY_ITEM = '/api/v1/agents/{agentId}/memories/{memoryId}';
+    private const ROUTE_MEMORY_ITEM       = '/api/v1/memories/{id}'; // NOSONAR (php:S1192) — const value is the only literal definition; route calls use self::ROUTE_*_ITEM
+    private const ROUTE_AGENT_MEMORY_ITEM = '/api/v1/agents/{agentId}/memories/{memoryId}'; // NOSONAR (php:S1192) — const value is the only literal definition; route calls use self::ROUTE_*_ITEM
 
     public function getName(): string
     {

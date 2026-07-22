@@ -79,11 +79,11 @@ describe('AgentMemoryController::store', function (): void {
         $request = jsonRequest('POST', "/api/v1/agents/{$agentId}/memories", ['name' => 'New', 'content' => 'c']);
         $request->attributes->set('agentId', $agentId);
         $response = $controller->store($request);
-
+ // NOSONAR (php:S1192) — test description string, intentionally inline
         expect($response->getStatusCode())->toBe(Response::HTTP_CREATED);
     });
 
-    test(AGENT_MEM_TEST_400_INVALID_JSON, function (): void {
+    test(AGENT_MEM_TEST_400_INVALID_JSON, function (): void { // NOSONAR (php:S1192) — Content-Type literal, intentionally inline
         [$controller, $authService] = makeAgentMemController();
         [, $agentId] = createAgentMemUser($authService, 'store400@example.com');
 
@@ -127,7 +127,7 @@ describe('AgentMemoryController::show', function (): void {
         $request->attributes->set('agentId', $agentId);
         $request->attributes->set('memoryId', $created['memory']['id']);
         $response = $controller->show($request);
-
+ // NOSONAR (php:S1192) — test description string, intentionally inline
         expect($response->getStatusCode())->toBe(Response::HTTP_OK);
     });
 
