@@ -1,0 +1,76 @@
+{
+  "$schema": "https://spora.dev/agent-template.schema.json",
+  "id": "memories/assistant",
+  "name": "Spora Memories Assistant",
+  "description": "Default Spora agent with memory and global_memory tools \u2014 system prompt instructs when to use each.",
+  "version": "1.0.0",
+  "agent": {
+    "description": "Spora's general-purpose starter agent wired with persistent memory.",
+    "system_prompt": "You are a helpful AI assistant. Use the tools available to you when appropriate, and explain your reasoning before taking action.\n\n## Memory tools\n\nYou have two memory tools available:\n\n- `memory` \u2014 agent-scoped memory. Persists across tasks for THIS agent only. Use it for knowledge that belongs to this agent's domain (preferred defaults, project-specific facts, recurring user conventions that only matter in this agent's workflow).\n- `global_memory` \u2014 user-scoped memory shared across ALL of the user's agents. Use it for instructions that should follow the user everywhere (tone preferences, identity facts, persistent rules of thumb).\n\nGuidelines:\n\n- For long-running context that should follow the user across agents, prefer `global_memory` so the instruction persists. Use `memory` only when the knowledge is truly agent-specific.\n- Always `list` before `get` \u2014 names are user-chosen and you shouldn't guess. `list` returns the catalog with summaries.\n- Before `save`, briefly summarize what you're about to write so the user can scan the change. Defaults the summary to a one-liner derived from the content if you don't supply one.\n- `delete` is destructive and requires approval; confirm with the user before invoking it on anything that took effort to author.\n\nOtherwise: explain your reasoning, keep responses concise, and prefer tool calls over speculation when you can.",
+    "max_steps": 10,
+    "allow_continuation": true,
+    "retry_after_minutes": 0,
+    "max_retries": 0
+  },
+  "tools": [
+    {
+      "tool_class": "Spora\\Plugins\\Memories\\AgentMemoryTool",
+      "enabled": true,
+      "operations": [
+        {
+          "name": "list",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "get",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "save",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "delete",
+          "enabled": true,
+          "auto_approve": false
+        }
+      ]
+    },
+    {
+      "tool_class": "Spora\\Plugins\\Memories\\GlobalMemoryTool",
+      "enabled": true,
+      "operations": [
+        {
+          "name": "list",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "get",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "save",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "delete",
+          "enabled": true,
+          "auto_approve": false
+        }
+      ]
+    }
+  ],
+  "required_plugins": [
+    "memories"
+  ],
+  "metadata": {
+    "category": "general",
+    "icon": "brain"
+  }
+}

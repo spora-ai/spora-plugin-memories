@@ -21,7 +21,7 @@ use Spora\Tools\Attributes\ToolOperation;
 #[ToolOperation(name: 'list', description: 'List all memories with summaries', enabledByDefault: true, requiresApprovalByDefault: false)]
 #[ToolOperation(name: 'get', description: 'Get a single memory by name', enabledByDefault: true, requiresApprovalByDefault: false)]
 #[ToolOperation(name: 'save', description: 'Create or update a memory', enabledByDefault: true, requiresApprovalByDefault: false)]
-#[ToolOperation(name: 'delete', description: 'Delete a memory by name', enabledByDefault: true, requiresApprovalByDefault: false)]
+#[ToolOperation(name: 'delete', description: 'Delete a memory by name', enabledByDefault: true, requiresApprovalByDefault: true)]
 final class GlobalMemoryTool extends AbstractMemoryTool
 {
     protected function getScope(): string

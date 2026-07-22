@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "947bd3822d0b097ff89cbe511d9fdb0f",
+    "content-hash": "9df94484baf8b06820705a4c5a5e83af",
     "packages": [
         {
             "name": "brick/math",
@@ -2488,16 +2488,16 @@
         },
         {
             "name": "spora-ai/spora-core",
-            "version": "dev-feat/extract-memories-plugin",
+            "version": "dev-main",
             "source": {
                 "type": "git",
-                "url": "git@github.com:spora-ai/spora-core.git",
-                "reference": "e632d2a6a7d3055e24d9494488f63b08dfb1a31c"
+                "url": "https://github.com/spora-ai/spora-core.git",
+                "reference": "87825953fef241178cc032f278b6b473dbaa11c6"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/spora-ai/spora-core/zipball/e632d2a6a7d3055e24d9494488f63b08dfb1a31c",
-                "reference": "e632d2a6a7d3055e24d9494488f63b08dfb1a31c",
+                "url": "https://api.github.com/repos/spora-ai/spora-core/zipball/87825953fef241178cc032f278b6b473dbaa11c6",
+                "reference": "87825953fef241178cc032f278b6b473dbaa11c6",
                 "shasum": ""
             },
             "require": {
@@ -2528,7 +2528,6 @@
                 "php-di/php-di": "^7.1",
                 "psr/log": "^3.0",
                 "spora-ai/installer": "^1.1",
-                "spora-ai/spora-plugin-tavily": "^0.3.2",
                 "symfony/console": "^8.0",
                 "symfony/http-client": "^8.0",
                 "symfony/http-foundation": "^8.0",
@@ -2546,6 +2545,7 @@
                 "phpstan/phpstan-mockery": "^2.0",
                 "zircote/swagger-php": "^6.4"
             },
+            "default-branch": true,
             "bin": [
                 "bin/spora",
                 "bin/spora-build"
@@ -2621,24 +2621,29 @@
                 "MIT"
             ],
             "description": "A portable, zero-configuration AI agent orchestration platform that runs on any shared host (cPanel/FTP) without system dependencies beyond PHP 8.4+.",
-            "time": "2026-07-21T16:53:49+00:00"
+            "support": {
+                "source": "https://github.com/spora-ai/spora-core/tree/main",
+                "issues": "https://github.com/spora-ai/spora-core/issues"
+            },
+            "time": "2026-07-22T17:18:39+00:00"
         },
         {
             "name": "spora-ai/spora-plugin-memories-frontend",
-            "version": "dev-feat/initial-implementation",
+            "version": "dev-main",
             "source": {
                 "type": "git",
-                "url": "git@github.com:spora-ai/spora-plugin-memories-frontend.git",
-                "reference": "c620728b782ca5267cb46d7dee3e3c70904cc7ce"
+                "url": "https://github.com/spora-ai/spora-plugin-memories-frontend.git",
+                "reference": "c2d60bfb280f7bb6550760481269237cb84710e3"
             },
             "dist": {
                 "type": "tar",
                 "url": "https://github.com/spora-ai/spora-plugin-memories-frontend/releases/download/v0.1.0/spora-plugin-memories-frontend-v0.1.0.tar.gz",
-                "reference": "c620728b782ca5267cb46d7dee3e3c70904cc7ce"
+                "reference": "c2d60bfb280f7bb6550760481269237cb84710e3"
             },
             "require": {
                 "php": "^8.4.1"
             },
+            "default-branch": true,
             "type": "spora-plugin-frontend",
             "extra": {
                 "_comment": "Must equal plugin.json#slug in spora-plugin-memories; SporaPluginFrontendInstaller refuses to install when missing.",
@@ -2673,49 +2678,11 @@
                 "MIT"
             ],
             "description": "Pre-built Vue SPA for the Spora memories admin panel. Delivered as type `spora-plugin-frontend`; the host SPA lazy-loads it via /plugins/spora-plugin-memories-frontend/main.js.",
-            "time": "2026-07-21T16:59:24+00:00"
-        },
-        {
-            "name": "spora-ai/spora-plugin-tavily",
-            "version": "v0.3.2",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/spora-ai/spora-plugin-tavily.git",
-                "reference": "de5f9d17a82186302a17c1fa6e80f26867984414"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/spora-ai/spora-plugin-tavily/zipball/de5f9d17a82186302a17c1fa6e80f26867984414",
-                "reference": "de5f9d17a82186302a17c1fa6e80f26867984414",
-                "shasum": ""
-            },
-            "require": {
-                "php": "^8.4.1",
-                "spora-ai/spora-core": ">=0.3.0 <1.0.0"
-            },
-            "require-dev": {
-                "friendsofphp/php-cs-fixer": "^3.94",
-                "mockery/mockery": "^1.6",
-                "pestphp/pest": "^4.0",
-                "phpstan/phpstan": "^2.1",
-                "phpstan/phpstan-mockery": "^2.0"
-            },
-            "type": "spora-plugin",
-            "autoload": {
-                "psr-4": {
-                    "Spora\\Plugins\\Tavily\\": "src/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "description": "Tavily web search for Spora agents.",
             "support": {
-                "issues": "https://github.com/spora-ai/spora-plugin-tavily/issues",
-                "source": "https://github.com/spora-ai/spora-plugin-tavily/tree/v0.3.2"
+                "source": "https://github.com/spora-ai/spora-plugin-memories-frontend/tree/main",
+                "issues": "https://github.com/spora-ai/spora-plugin-memories-frontend/issues"
             },
-            "time": "2026-07-08T11:47:06+00:00"
+            "time": "2026-07-22T07:44:00+00:00"
         },
         {
             "name": "symfony/clock",
@@ -11087,13 +11054,13 @@
     "aliases": [
         {
             "package": "spora-ai/spora-core",
-            "version": "dev-feat/extract-memories-plugin",
+            "version": "dev-main",
             "alias": "0.12.0",
             "alias_normalized": "0.12.0.0"
         },
         {
             "package": "spora-ai/spora-plugin-memories-frontend",
-            "version": "dev-feat/initial-implementation",
+            "version": "dev-main",
             "alias": "0.1.0",
             "alias_normalized": "0.1.0.0"
         }

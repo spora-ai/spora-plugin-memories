@@ -434,6 +434,19 @@ describe('updateGlobalMemory', function (): void {
             ->and($result['memory']['summary'])->toBe('Original summary');
     });
 
+    it('rejects empty name on update', function (): void {
+        [$userId] = createUserWithAgent();
+        $service = makeMemoryService();
+        $memory = Memory::create([
+            'user_id'  => $userId,
+            'agent_id' => null,
+            'name'     => 'existing',
+        ]);
+
+        expect(fn() => $service->updateGlobalMemory($memory->id, $userId, ['name' => '   ']))
+            ->toThrow(MemoryValidationException::class, 'name cannot be empty');
+    });
+
     it('updates without changes', function (): void {
         [$userId] = createUserWithAgent();
         $service = makeMemoryService();

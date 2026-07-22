@@ -274,6 +274,10 @@ final class MemoryService implements MemoryServiceInterface
             if ($name === '') {
                 throw new MemoryValidationException('name is required');
             }
+            return;
+        }
+        if (array_key_exists('name', $data) && trim((string) $data['name']) === '') {
+            throw new MemoryValidationException('name cannot be empty');
         }
     }
 

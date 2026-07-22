@@ -8,10 +8,9 @@ This plugin contributes the **Memories** admin panel to the host's Apps dropdown
 
 ```bash
 composer require spora-ai/spora-plugin-memories
-composer require spora-ai/spora-plugin-memories-frontend
 ```
 
-Both packages are required: the PHP package ships the migration (`memories` table), the controllers, the service layer, and the two memory tools (`memory` and `global_memory`). The frontend package ships the Vue IIFE bundle that the host SPA lazy-loads at runtime.
+The PHP package's `require` block pulls the frontend package in transitively — operators don't need to require it separately. The PHP package ships the migration (`memories` table), the controllers, the service layer, and the two memory tools (`memory` and `global_memory`); the frontend package ships the Vue IIFE bundle that the host SPA lazy-loads at runtime.
 
 Requires `spora-ai/spora-core` ≥ 0.12.0 (when this plugin shipped, the memories feature was extracted out of core and the host was bumped to drop the previous core implementation).
 
@@ -19,7 +18,7 @@ Requires `spora-ai/spora-core` ≥ 0.12.0 (when this plugin shipped, the memorie
 
 - Surfaces rows from the `memories` table as a sidebar-and-detail admin panel scoped per user (global) and per agent.
 - Creates a `memories_000001_create_memories_table.php` migration. On installs upgrading from a host that already shipped the `memories` table, the migration's `hasTable('memories')` guard makes it a no-op.
-- Ships two LLM-callable tools — `memory` (agent-scoped) and `global_memory` (cross-agent, per user) — each with `list`, `get`, `save`, and `delete` operations. Read ops auto-approve; write ops require explicit approval.
+- Ships two LLM-callable tools — `memory` (agent-scoped) and `global_memory` (cross-agent, per user) — each with `list`, `get`, `save`, and `delete` operations. List / get / save auto-approve; only `delete` requires explicit user approval (it is destructive).
 - Adds a bundled agent template (`memories-assistant.json`) under the plugin's `agent-templates/` directory, wiring both tools onto the host's default system prompt with explicit guidance on when to use each.
 
 ## API surface
@@ -41,21 +40,15 @@ After install, 12 endpoints appear under `/api/v1/memories*`:
 
 All endpoints require `AuthMiddleware` + `CsrfMiddleware`.
 
-## Companion plugins
-
-Listed in `composer.json` under `suggest`:
-
-- _None yet._ Future plugins that consume memory (a `spora-plugin-vault`, a `spora-plugin-search`) should appear here.
-
 ## Uninstalling
 
 `composer remove spora-ai/spora-plugin-memories` removes the admin-panel metadata from the App Registry, drops the 12 routes, and the navbar tile disappears cleanly. The `memories` table is **preserved** — uninstalling does not `Capsule::schema()->dropIfExists('memories')`. Reinstalling is a no-op on the schema. This is intentional: data persists across plugin uninstall/reinstall cycles.
 
 ## Reference
 
-The canonical reference (REST contract, schema, tool definitions, agent template schema) lives on the docs site:
+The canonical reference (REST contract, schema, tool definitions, agent template schema) lives on the docs site at [docs.spora-ai.com/develop/plugins/reference/memories](https://docs.spora-ai.com/develop/plugins/reference/memories).
 
-**[docs.spora-ai.com/develop/plugins/reference/memories](https://docs.spora-ai.com/develop/plugins/reference/memories)**
+If that URL is unreachable (the page may not have published yet), the source-of-truth copy lives in the spora-docs repo at [`docs/develop/plugins/reference/memories.md`](https://github.com/spora-ai/spora-docs/blob/main/docs/develop/plugins/reference/memories.md).
 
 ## License
 
