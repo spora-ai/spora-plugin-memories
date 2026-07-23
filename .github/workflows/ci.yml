@@ -12,6 +12,19 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# Cross-PR dependency: spora-plugin-memories#3 wraps every memory write in
+# `Spora\Services\Text\Utf8Sanitizer`, which lives in spora-core#160
+# (branch `feat/utf8-sanitizer`). Until #160 merges into spora-core main,
+# `dev-main` of spora-core doesn't have the class and the plugin's tests
+# fail with `Class "Spora\Services\Text\Utf8Sanitizer" not found`.
+#
+# The override below installs spora-core from the PR branch during CI only
+# — composer.json and composer.lock are mutated ephemerally on the runner
+# and never committed. Remove this override (or set SPORA_CORE_REF=main)
+# once spora-core#160 is merged.
+env:
+  SPORA_CORE_REF: feat/utf8-sanitizer
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -36,8 +49,14 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Composer install
-        run: composer install --no-interaction
+      # Install from spora-core PR #160's branch so the Utf8Sanitizer class
+      # is available. composer.json / composer.lock are mutated only on the
+      # runner (ephemeral) — nothing is committed.
+      - name: Install spora-core from PR #160
+        run: |
+          composer require --no-interaction --no-update \
+            "spora-ai/spora-core:dev-${{ env.SPORA_CORE_REF }} as 0.12.0"
+          composer update --no-interaction --no-progress spora-ai/spora-core
 
       - name: Run Pest
         run: ./vendor/bin/pest
@@ -56,11 +75,16 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Composer install
-        run: composer install --no-interaction
+      - name: Install spora-core from PR #160
+        run: |
+          composer require --no-interaction --no-update \
+            "spora-ai/spora-core:dev-${{ env.SPORA_CORE_REF }} as 0.12.0"
+          composer update --no-interaction --no-progress spora-ai/spora-core
 
       - name: Run PHPStan
-        run: ./vendor/bin/phpstan analyse --no-progress
+        # Match composer.json's "analyse" script so the 512M memory limit is used;
+        # the runner's 128M default crashes PHPStan on parallel workers.
+        run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=512M
 
   code-style:
     name: php-cs-fixer (dry-run)
@@ -76,8 +100,11 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Composer install
-        run: composer install --no-interaction
+      - name: Install spora-core from PR #160
+        run: |
+          composer require --no-interaction --no-update \
+            "spora-ai/spora-core:dev-${{ env.SPORA_CORE_REF }} as 0.12.0"
+          composer update --no-interaction --no-progress spora-ai/spora-core
 
       - name: Check code style
         # Same ruleset as Spora core's .php-cs-fixer.php so plugin style matches host.
@@ -101,14 +128,17 @@ jobs:
           coverage: xdebug
           tools: composer
 
-      - name: Composer install
-        run: composer install --no-interaction
+      - name: Install spora-core from PR #160
+        run: |
+          composer require --no-interaction --no-update \
+            "spora-ai/spora-core:dev-${{ env.SPORA_CORE_REF }} as 0.12.0"
+          composer update --no-interaction --no-progress spora-ai/spora-core
 
       - name: Generate clover coverage report
         run: ./vendor/bin/pest --coverage-clover=coverage.xml --coverage-filter=src
 
       - name: Upload coverage.xml
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: coverage-report
           path: coverage.xml

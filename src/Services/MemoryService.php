@@ -9,6 +9,7 @@ use Spora\Models\Agent;
 use Spora\Plugins\Memories\Models\Memory;
 use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
 use Spora\Services\Exceptions\AgentNotFoundException;
+use Spora\Services\Text\Utf8Sanitizer;
 
 /**
  * Service for memory management.
@@ -23,6 +24,27 @@ use Spora\Services\Exceptions\AgentNotFoundException;
 final class MemoryService implements MemoryServiceInterface
 {
     private const DATETIME_FORMAT = 'Y-m-d H:i:s';
+
+    /**
+     * Wraps each named string field in Utf8Sanitizer::scrubString. Non-string
+     * and absent fields pass through untouched. Used by the create / update
+     * paths so every byte that lands in `memories.summary` and
+     * `memories.content` is valid UTF-8.
+     *
+     * @param array<string, mixed> $data
+     * @param string ...$fields field names to scrub when present
+     * @return array<string, mixed>
+     */
+    private static function scrubStringFields(array $data, string ...$fields): array
+    {
+        foreach ($fields as $field) {
+            if (isset($data[$field]) && is_string($data[$field])) {
+                $data[$field] = Utf8Sanitizer::scrubString($data[$field]);
+            }
+        }
+        return $data;
+    }
+
 
     public function listGlobalMemories(int $userId): array
     {
@@ -85,12 +107,13 @@ final class MemoryService implements MemoryServiceInterface
     {
         $this->validate($data, isCreation: true);
 
+        $payload = self::scrubStringFields($data, 'summary', 'content');
         $id = Capsule::table('memories')->insertGetId([
             'user_id'    => $userId,
             'agent_id'   => null,
             'name'       => $data['name'],
-            'summary'    => isset($data['summary']) ? trim((string) $data['summary']) : null,
-            'content'    => isset($data['content']) ? trim((string) $data['content']) : null,
+            'summary'    => isset($payload['summary']) ? trim((string) $payload['summary']) : null,
+            'content'    => isset($payload['content']) ? trim((string) $payload['content']) : null,
             'order'      => $this->getNextOrder(null, $userId),
             'created_at' => date(self::DATETIME_FORMAT),
             'updated_at' => date(self::DATETIME_FORMAT),
@@ -110,12 +133,13 @@ final class MemoryService implements MemoryServiceInterface
 
         $this->validate($data, isCreation: true);
 
+        $payload = self::scrubStringFields($data, 'summary', 'content');
         $id = Capsule::table('memories')->insertGetId([
             'user_id'    => $userId,
             'agent_id'   => $agentId,
             'name'       => $data['name'],
-            'summary'    => isset($data['summary']) ? trim((string) $data['summary']) : null,
-            'content'    => isset($data['content']) ? trim((string) $data['content']) : null,
+            'summary'    => isset($payload['summary']) ? trim((string) $payload['summary']) : null,
+            'content'    => isset($payload['content']) ? trim((string) $payload['content']) : null,
             'order'      => $this->getNextOrder($agentId, $userId),
             'created_at' => date(self::DATETIME_FORMAT),
             'updated_at' => date(self::DATETIME_FORMAT),
@@ -146,6 +170,7 @@ final class MemoryService implements MemoryServiceInterface
             if (isset($updateData['order'])) {
                 $updateData['order'] = (int) $updateData['order'];
             }
+            $updateData = self::scrubStringFields($updateData, 'summary', 'content');
             Capsule::table('memories')
                 ->where('id', $memoryId)
                 ->update(array_merge($updateData, ['updated_at' => date(self::DATETIME_FORMAT)]));
@@ -176,6 +201,7 @@ final class MemoryService implements MemoryServiceInterface
             if (isset($updateData['order'])) {
                 $updateData['order'] = (int) $updateData['order'];
             }
+            $updateData = self::scrubStringFields($updateData, 'summary', 'content');
             Capsule::table('memories')
                 ->where('id', $memoryId)
                 ->update(array_merge($updateData, ['updated_at' => date(self::DATETIME_FORMAT)]));

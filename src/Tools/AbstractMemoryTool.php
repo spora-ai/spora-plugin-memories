@@ -6,6 +6,7 @@ namespace Spora\Plugins\Memories\Tools;
 
 use Spora\Models\Agent;
 use Spora\Plugins\Memories\Models\Memory;
+use Spora\Services\Text\Utf8Sanitizer;
 use Spora\Tools\AbstractTool;
 use Spora\Tools\Attributes\ToolParameter;
 use Spora\Tools\ValueObjects\ToolResult;
@@ -143,9 +144,9 @@ abstract class AbstractMemoryTool extends AbstractTool
 
     private function updateMemoryFields(Memory $memory, string $content, ?string $summary, int $order): void
     {
-        $memory->content = $content;
+        $memory->content = Utf8Sanitizer::scrubString($content);
         if ($summary !== null) {
-            $memory->summary = $summary;
+            $memory->summary = Utf8Sanitizer::scrubString($summary);
         }
         $memory->order = $order;
         $memory->save();

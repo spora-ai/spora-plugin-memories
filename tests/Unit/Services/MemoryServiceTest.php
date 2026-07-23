@@ -789,3 +789,61 @@ describe('resource transformation', function (): void {
         expect($memory['updated_at'])->not->toBeEmpty();
     });
 });
+
+
+
+describe('UTF-8 sanitization on write', function (): void {
+
+    it('createAgentMemory persists a clean UTF-8 content with Latin-1 bytes scrubbed', function (): void {
+        [$userId, $agentId] = createUserWithAgent();
+        $service = makeMemoryService();
+
+        // 0xE9 / 0xFC are valid Windows-1252; the sanitizer salvages them as UTF-8.
+        $dirty = 'café' . chr(0xE9) . chr(0xFC) . '!';
+        $result = $service->createAgentMemory($agentId, $userId, [
+            'name'    => 'utf8_test',
+            'content' => $dirty,
+        ]);
+
+        $persisted = Memory::findOrFail($result['memory']['id']);
+        expect($persisted->content)->not->toBeNull();
+        expect(mb_check_encoding($persisted->content, 'UTF-8'))->toBeTrue();
+        // The scrubber should drop or salvage the bad bytes — the key
+        // invariant is "the stored value round-trips through json_encode".
+        expect(json_encode(['v' => $persisted->content]))->not->toBeFalse();
+    });
+
+    it('updateGlobalMemory scrubs Latin-1 summary and content before persistence', function (): void {
+        [$userId] = createUserWithAgent();
+        $service = makeMemoryService();
+
+        $memory = Memory::create([
+            'user_id' => $userId,
+            'name'    => 'upd_test',
+        ]);
+
+        $result = $service->updateGlobalMemory($memory->id, $userId, [
+            'summary' => 'naïve' . chr(0xE9),
+            'content' => 'über' . chr(0xFC),
+        ]);
+
+        $persisted = Memory::findOrFail($memory->id);
+        expect(mb_check_encoding($persisted->summary, 'UTF-8'))->toBeTrue();
+        expect(mb_check_encoding($persisted->content, 'UTF-8'))->toBeTrue();
+        expect(json_encode($result['memory']))->not->toBeFalse();
+    });
+
+    it('createGlobalMemory scrubs a Latin-1 summary', function (): void {
+        [$userId] = createUserWithAgent();
+        $service = makeMemoryService();
+
+        $result = $service->createGlobalMemory($userId, [
+            'name'    => 'global_utf8',
+            'summary' => 'résumé' . chr(0xE9),
+            'content' => 'plain',
+        ]);
+
+        $persisted = Memory::findOrFail($result['memory']['id']);
+        expect(mb_check_encoding($persisted->summary, 'UTF-8'))->toBeTrue();
+    });
+});
