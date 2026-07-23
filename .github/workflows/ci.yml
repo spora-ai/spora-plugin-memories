@@ -82,7 +82,9 @@ jobs:
           composer update --no-interaction --no-progress spora-ai/spora-core
 
       - name: Run PHPStan
-        run: ./vendor/bin/phpstan analyse --no-progress
+        # Match composer.json's "analyse" script so the 512M memory limit is used;
+        # the runner's 128M default crashes PHPStan on parallel workers.
+        run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=512M
 
   code-style:
     name: php-cs-fixer (dry-run)

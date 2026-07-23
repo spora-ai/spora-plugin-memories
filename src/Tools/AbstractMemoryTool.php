@@ -6,6 +6,7 @@ namespace Spora\Plugins\Memories\Tools;
 
 use Spora\Models\Agent;
 use Spora\Plugins\Memories\Models\Memory;
+use Spora\Services\Text\Utf8Sanitizer;
 use Spora\Tools\AbstractTool;
 use Spora\Tools\Attributes\ToolParameter;
 use Spora\Tools\ValueObjects\ToolResult;
