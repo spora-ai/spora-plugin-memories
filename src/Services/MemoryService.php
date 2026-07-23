@@ -9,6 +9,7 @@ use Spora\Models\Agent;
 use Spora\Plugins\Memories\Models\Memory;
 use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
 use Spora\Services\Exceptions\AgentNotFoundException;
+use Spora\Services\Text\Utf8Sanitizer;
 
 /**
  * Service for memory management.
@@ -89,8 +90,8 @@ final class MemoryService implements MemoryServiceInterface
             'user_id'    => $userId,
             'agent_id'   => null,
             'name'       => $data['name'],
-            'summary'    => isset($data['summary']) ? trim((string) $data['summary']) : null,
-            'content'    => isset($data['content']) ? trim((string) $data['content']) : null,
+            'summary'    => isset($data['summary']) ? Utf8Sanitizer::scrubString(trim((string) $data['summary'])) : null,
+            'content'    => isset($data['content']) ? Utf8Sanitizer::scrubString(trim((string) $data['content'])) : null,
             'order'      => $this->getNextOrder(null, $userId),
             'created_at' => date(self::DATETIME_FORMAT),
             'updated_at' => date(self::DATETIME_FORMAT),
@@ -114,8 +115,8 @@ final class MemoryService implements MemoryServiceInterface
             'user_id'    => $userId,
             'agent_id'   => $agentId,
             'name'       => $data['name'],
-            'summary'    => isset($data['summary']) ? trim((string) $data['summary']) : null,
-            'content'    => isset($data['content']) ? trim((string) $data['content']) : null,
+            'summary'    => isset($data['summary']) ? Utf8Sanitizer::scrubString(trim((string) $data['summary'])) : null,
+            'content'    => isset($data['content']) ? Utf8Sanitizer::scrubString(trim((string) $data['content'])) : null,
             'order'      => $this->getNextOrder($agentId, $userId),
             'created_at' => date(self::DATETIME_FORMAT),
             'updated_at' => date(self::DATETIME_FORMAT),
@@ -146,6 +147,12 @@ final class MemoryService implements MemoryServiceInterface
             if (isset($updateData['order'])) {
                 $updateData['order'] = (int) $updateData['order'];
             }
+            if (isset($updateData['summary']) && is_string($updateData['summary'])) {
+                $updateData['summary'] = Utf8Sanitizer::scrubString($updateData['summary']);
+            }
+            if (isset($updateData['content']) && is_string($updateData['content'])) {
+                $updateData['content'] = Utf8Sanitizer::scrubString($updateData['content']);
+            }
             Capsule::table('memories')
                 ->where('id', $memoryId)
                 ->update(array_merge($updateData, ['updated_at' => date(self::DATETIME_FORMAT)]));
@@ -175,6 +182,12 @@ final class MemoryService implements MemoryServiceInterface
         if ($updateData !== []) {
             if (isset($updateData['order'])) {
                 $updateData['order'] = (int) $updateData['order'];
+            }
+            if (isset($updateData['summary']) && is_string($updateData['summary'])) {
+                $updateData['summary'] = Utf8Sanitizer::scrubString($updateData['summary']);
+            }
+            if (isset($updateData['content']) && is_string($updateData['content'])) {
+                $updateData['content'] = Utf8Sanitizer::scrubString($updateData['content']);
             }
             Capsule::table('memories')
                 ->where('id', $memoryId)
