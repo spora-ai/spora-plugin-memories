@@ -19,8 +19,8 @@ use Spora\Tools\ValueObjects\ToolResult;
  * the auto-generated parameter schema for free — they only need their own #[Tool]
  * declaration and an implementation of getScope().
  */
-#[ToolParameter(name: 'name', type: 'string', description: 'Unique name for the memory (e.g. "user_preferences", "project_context").', required: false)]
-#[ToolParameter(name: 'content', type: 'string', description: 'Memory content in markdown. Required for save action.', required: false)]
+#[ToolParameter(name: 'name', type: 'string', description: 'Unique name for the memory (e.g. "user_preferences", "project_context").', required: ['get', 'save', 'delete'])]
+#[ToolParameter(name: 'content', type: 'string', description: 'Memory content in markdown. Required for save action.', required: ['save'])]
 #[ToolParameter(name: 'summary', type: 'string', description: 'Brief one-line summary for list view. Auto-derived from content if omitted.', required: false)]
 #[ToolParameter(name: 'order', type: 'integer', description: 'Sort order for listing. Defaults to 0.', required: false)]
 abstract class AbstractMemoryTool extends AbstractTool
