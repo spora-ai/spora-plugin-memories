@@ -67,7 +67,7 @@
     }
   ],
   "required_plugins": [
-    "memories"
+    "spora-ai/spora-plugin-memories"
   ],
   "metadata": {
     "category": "general",
