@@ -2492,12 +2492,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/spora-ai/spora-core.git",
-                "reference": "87825953fef241178cc032f278b6b473dbaa11c6"
+                "reference": "7c1b580ef230dfa481e9d58f78915255144adb64"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/spora-ai/spora-core/zipball/87825953fef241178cc032f278b6b473dbaa11c6",
-                "reference": "87825953fef241178cc032f278b6b473dbaa11c6",
+                "url": "https://api.github.com/repos/spora-ai/spora-core/zipball/7c1b580ef230dfa481e9d58f78915255144adb64",
+                "reference": "7c1b580ef230dfa481e9d58f78915255144adb64",
                 "shasum": ""
             },
             "require": {
@@ -2599,13 +2599,13 @@
                     "./vendor/bin/pest"
                 ],
                 "test:parallel": [
-                    "./vendor/bin/pest --parallel --processes=auto --max-batch-size=50"
+                    "./vendor/bin/pest --parallel --processes=auto --max-batch-size=50 --fail-on-risky"
                 ],
                 "test:coverage": [
-                    "./vendor/bin/pest --coverage --coverage-html=coverage"
+                    "./vendor/bin/pest --coverage --coverage-html=coverage --fail-on-risky"
                 ],
                 "test:coverage:clover": [
-                    "./vendor/bin/pest --coverage-clover=coverage.xml"
+                    "./vendor/bin/pest --coverage-clover=coverage.xml --fail-on-risky"
                 ],
                 "analyse": [
                     "./vendor/bin/phpstan analyse --memory-limit=2G"
@@ -2615,6 +2615,9 @@
                 ],
                 "openapi": [
                     "@php bin/spora-build openapi:generate"
+                ],
+                "openapi:check": [
+                    "@php bin/spora-build openapi:check"
                 ]
             },
             "license": [
@@ -2622,10 +2625,10 @@
             ],
             "description": "A portable, zero-configuration AI agent orchestration platform that runs on any shared host (cPanel/FTP) without system dependencies beyond PHP 8.4+.",
             "support": {
-                "source": "https://github.com/spora-ai/spora-core/tree/main",
+                "source": "https://github.com/spora-ai/spora-core/tree/v0.12.1",
                 "issues": "https://github.com/spora-ai/spora-core/issues"
             },
-            "time": "2026-07-22T17:18:39+00:00"
+            "time": "2026-07-30T08:42:27+00:00"
         },
         {
             "name": "spora-ai/spora-plugin-memories-frontend",
@@ -2633,12 +2636,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/spora-ai/spora-plugin-memories-frontend.git",
-                "reference": "c2d60bfb280f7bb6550760481269237cb84710e3"
+                "reference": "f7c2595e5a25969830b135cef7e76e272108cb38"
             },
             "dist": {
                 "type": "tar",
                 "url": "https://github.com/spora-ai/spora-plugin-memories-frontend/releases/download/v0.1.0/spora-plugin-memories-frontend-v0.1.0.tar.gz",
-                "reference": "c2d60bfb280f7bb6550760481269237cb84710e3"
+                "reference": "f7c2595e5a25969830b135cef7e76e272108cb38"
             },
             "require": {
                 "php": "^8.4.1"
@@ -2679,10 +2682,10 @@
             ],
             "description": "Pre-built Vue SPA for the Spora memories admin panel. Delivered as type `spora-plugin-frontend`; the host SPA lazy-loads it via /plugins/spora-plugin-memories-frontend/main.js.",
             "support": {
-                "source": "https://github.com/spora-ai/spora-plugin-memories-frontend/tree/main",
+                "source": "https://github.com/spora-ai/spora-plugin-memories-frontend/tree/v0.1.0",
                 "issues": "https://github.com/spora-ai/spora-plugin-memories-frontend/issues"
             },
-            "time": "2026-07-22T07:44:00+00:00"
+            "time": "2026-07-23T09:15:13+00:00"
         },
         {
             "name": "symfony/clock",
