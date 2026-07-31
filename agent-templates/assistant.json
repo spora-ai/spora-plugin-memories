@@ -1,5 +1,5 @@
 {
-  "$schema": "https://spora.dev/agent-template.schema.json",
+  "$schema": "https://docs.spora-ai.com/schemas/agent-template.schema.json",
   "id": "memories/assistant",
   "name": "Spora Memories Assistant",
   "description": "Default Spora agent with memory and global_memory tools \u2014 system prompt instructs when to use each.",
