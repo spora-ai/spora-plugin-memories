@@ -3,7 +3,7 @@
     "description": "Persistent memory storage for agents and users \u2014 UI + memory/global_memory tools.",
     "type": "spora-plugin",
     "license": "MIT",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "require": {
         "php": "^8.4.1",
         "spora-ai/spora-core": ">=0.12.0 <2.0.0",
