@@ -6,14 +6,14 @@
     "version": "0.1.0",
     "require": {
         "php": "^8.4.1",
-        "spora-ai/spora-core": ">=0.11.1 <2.0.0",
+        "spora-ai/spora-core": ">=0.12.0 <2.0.0",
         "spora-ai/spora-plugin-memories-frontend": ">=0.1.0 <2.0.0"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.94",
         "larastan/larastan": "^3.9",
         "mockery/mockery": "^1.6",
-        "pestphp/pest": "^4.0",
+        "pestphp/pest": "^5.0",
         "phpstan/phpstan": "^2.1",
         "phpstan/phpstan-mockery": "^2.0"
     },
