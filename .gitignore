@@ -11,3 +11,5 @@
 .phpstan-cache/
 /:memory:
 /plugins/
+
+/tmp/
