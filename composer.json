@@ -1,9 +1,8 @@
 {
     "name": "spora-ai/spora-plugin-memories",
-    "description": "Persistent memory storage for agents and users \u2014 UI + memory/global_memory tools.",
+    "description": "Persistent memory storage for agents and users — UI + memory/global_memory tools.",
     "type": "spora-plugin",
     "license": "MIT",
-    "version": "0.1.1",
     "require": {
         "php": "^8.4.1",
         "spora-ai/spora-core": ">=0.12.0 <2.0.0",
