@@ -6,6 +6,7 @@ namespace Spora\Plugins\Memories\Tools;
 
 use Spora\Models\Agent;
 use Spora\Plugins\Memories\Models\Memory;
+use Spora\Services\PrincipalContext;
 use Spora\Services\Text\Utf8Sanitizer;
 use Spora\Tools\AbstractTool;
 use Spora\Tools\Attributes\ToolParameter;
@@ -27,8 +28,13 @@ abstract class AbstractMemoryTool extends AbstractTool
 {
     abstract protected function getScope(): string;
 
-    public function execute(array $arguments, int $agentId, ?int $userId = null, ?int $taskId = null): ToolResult
-    {
+    public function execute(
+        array $arguments,
+        int $agentId,
+        ?int $userId = null,
+        ?int $taskId = null,
+        ?PrincipalContext $context = null,
+    ): ToolResult {
         $operation = $this->getOperationName($arguments);
         $scope = $this->getScope();
 
