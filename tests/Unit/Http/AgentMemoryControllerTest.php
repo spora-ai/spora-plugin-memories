@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Spora\Plugins\Memories\Tests\Unit\Http;
 
 use Spora\Auth\AuthService;
-use Spora\Models\Agent;
 use Spora\Plugins\Memories\Http\AgentMemoryController;
 use Spora\Plugins\Memories\Services\MemoryService;
 use Symfony\Component\HttpFoundation\Request;
@@ -32,16 +31,9 @@ function createAgentMemUser(AuthService $authService, string $email): array
     $userId = $authService->register($unique, 'Password1!', 'User');
     simulateLoggedInSession($userId, $unique);
 
-    $agent = Agent::create([
-        'user_id'      => $userId,
-        'name'         => 'Test Agent',
-        'llm_provider' => 'mock',
-        'llm_model'    => 'mock',
-        'max_steps'    => 10,
-        'is_active'    => true,
-    ]);
+    $agentId = createAgentWithPrincipal($userId, 'Test Agent', ['max_steps' => 10]);
 
-    return [$userId, (int) $agent->id];
+    return [$userId, $agentId];
 }
 
 describe('AgentMemoryController::index', function (): void {

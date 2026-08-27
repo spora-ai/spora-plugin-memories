@@ -6,6 +6,7 @@ namespace Spora\Plugins\Memories\Tools;
 
 use Spora\Models\Agent;
 use Spora\Plugins\Memories\Models\Memory;
+use Spora\Services\PrincipalContext;
 use Spora\Services\Text\Utf8Sanitizer;
 use Spora\Tools\AbstractTool;
 use Spora\Tools\Attributes\ToolParameter;
@@ -18,6 +19,12 @@ use Spora\Tools\ValueObjects\ToolResult;
  * Extending AbstractTool gives the subclasses (AgentMemoryTool, GlobalMemoryTool)
  * the auto-generated parameter schema for free — they only need their own #[Tool]
  * declaration and an implementation of getScope().
+ *
+ * Memory writes are runner-scoped: the author of a memory is the user who
+ * triggered the current task (`PrincipalContext::runnerUserId`), not the
+ * agent's paying user (the legacy 3rd-arg `$userId`). Without this fix, a
+ * group-context task would write the runner's note into the owner's
+ * namespace and silently break per-user recall.
  */
 #[ToolParameter(name: 'name', type: 'string', description: 'Unique name for the memory (e.g. "user_preferences", "project_context").', required: ['get', 'save', 'delete'])]
 #[ToolParameter(name: 'content', type: 'string', description: 'Memory content in markdown. Required for save action.', required: ['save'])]
@@ -27,22 +34,32 @@ abstract class AbstractMemoryTool extends AbstractTool
 {
     abstract protected function getScope(): string;
 
-    public function execute(array $arguments, int $agentId, ?int $userId = null, ?int $taskId = null): ToolResult
-    {
+    public function execute(
+        array $arguments,
+        int $agentId,
+        ?int $userId = null,
+        ?int $taskId = null,
+        ?PrincipalContext $context = null,
+    ): ToolResult {
         $operation = $this->getOperationName($arguments);
         $scope = $this->getScope();
 
-        // Derive userId from agent if not provided (global memories need user context)
+        // Resolve the writer (runner of the task) once, up front. The runner
+        // is the author of any saves, and the scope anchor for list / get /
+        // delete so the runner only sees their own memories. Falls back to
+        // the legacy 3rd-arg `$userId` for callers that haven't migrated to
+        // PrincipalContext yet (controllers, tests).
         if ($userId === null) {
             $agent = Agent::find($agentId);
             $userId = $agent?->user_id;
         }
+        $writerId = $context !== null ? ($context->runnerUserId ?? $userId) : $userId;
 
         return match ($operation) {
-            'list'   => $this->list($scope, $agentId, $userId),
-            'get'    => $this->get($arguments, $scope, $agentId, $userId),
-            'save'   => $this->save($arguments, $scope, $agentId, $userId),
-            'delete' => $this->delete($arguments, $scope, $agentId, $userId),
+            'list'   => $this->list($scope, $agentId, $writerId),
+            'get'    => $this->get($arguments, $scope, $agentId, $writerId),
+            'save'   => $this->save($arguments, $scope, $agentId, $writerId),
+            'delete' => $this->delete($arguments, $scope, $agentId, $writerId),
             default  => new ToolResult(false, 'Invalid action. Must be list, get, save, or delete.'),
         };
     }
@@ -129,6 +146,11 @@ abstract class AbstractMemoryTool extends AbstractTool
     // Helpers extracted from save() to keep its cognitive complexity below SonarQube's
     // php:S3776 threshold. The scope/userId filter and create-data rules are non-trivial
     // branches, and inlining them inflated the method's complexity past the limit.
+    //
+    // The `$userId` parameter here is the writer id (resolved at the top of
+    // execute() via PrincipalContext::runnerUserId ?? legacy $userId). The
+    // parameter name is kept as `$userId` so existing positional callers don't
+    // break — semantically it is now the runner id.
 
     private function applyScopeFilter($query, string $scope, int $agentId, ?int $userId): void
     {

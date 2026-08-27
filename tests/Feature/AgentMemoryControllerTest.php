@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Spora\Auth\AuthService;
-use Spora\Models\Agent;
 use Spora\Plugins\Memories\Http\AgentMemoryController;
 use Spora\Plugins\Memories\Models\Memory;
 use Spora\Plugins\Memories\Services\MemoryService;
@@ -28,23 +27,8 @@ function createMemoryTestUserWithAgents(AuthService $authService, string $email 
     $userId = $authService->register("{$seq}{$email}", 'Password1!', $displayName);
     simulateLoggedInSession($userId, "{$seq}{$email}");
 
-    $agentId1 = Agent::create([
-        'user_id'      => $userId,
-        'name'         => 'Agent One',
-        'llm_provider' => 'mock',
-        'llm_model'    => 'mock',
-        'max_steps'    => 10,
-        'is_active'    => true,
-    ])->id;
-
-    $agentId2 = Agent::create([
-        'user_id'      => $userId,
-        'name'         => 'Agent Two',
-        'llm_provider' => 'mock',
-        'llm_model'    => 'mock',
-        'max_steps'    => 10,
-        'is_active'    => true,
-    ])->id;
+    $agentId1 = createAgentWithPrincipal($userId, 'Agent One', ['max_steps' => 10]);
+    $agentId2 = createAgentWithPrincipal($userId, 'Agent Two', ['max_steps' => 10]);
 
     return [$userId, $agentId1, $agentId2];
 }
