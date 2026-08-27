@@ -246,7 +246,20 @@ final class MemoryService implements MemoryServiceInterface
 
     private function findAgent(int $id, int $userId): ?Agent
     {
-        return Agent::where('id', $id)->where('user_id', $userId)->first();
+        // Resolve via the user-principal — spora-core migration 0067 dropped
+        // agents.user_id and made agents.principal_id the ownership column.
+        // SQLite silently treats an unknown double-quoted identifier as a
+        // string literal (so the previous `where('user_id', $userId)` was a
+        // no-op that returned null for every row), which manifested as a
+        // blanket AgentNotFoundException in tests.
+        $principalId = Capsule::table('principals')
+            ->where('type', 'user')
+            ->where('user_id', $userId)
+            ->value('id');
+        if ($principalId === null) {
+            return null;
+        }
+        return Agent::where('id', $id)->where('principal_id', $principalId)->first();
     }
 
     private function getNextOrder(?int $agentId, int $userId): int

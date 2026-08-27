@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Spora\Models\Agent;
 use Spora\Plugins\Memories\Models\Memory;
 use Spora\Plugins\Memories\Tools\AgentMemoryTool;
 use Spora\Plugins\Memories\Tools\GlobalMemoryTool;
@@ -23,14 +22,7 @@ function createMemoryToolTestUser(string $email = 'memory@example.com'): array
     $authService = bootAuthLayer();
     $userId = bootAuth($authService, "{$seq}{$email}", MEM_TEST_PASSWORD);
 
-    $agentId = Agent::create([
-        'user_id'      => $userId,
-        'name'         => 'Test Agent',
-        'llm_provider' => 'mock',
-        'llm_model'    => 'mock',
-        'max_steps'    => 10,
-        'is_active'    => true,
-    ])->id;
+    $agentId = createAgentWithPrincipal($userId, 'Test Agent', ['max_steps' => 10]);
 
     return [$userId, $agentId];
 }
@@ -95,14 +87,7 @@ describe('AgentMemoryTool::list action', function (): void {
             'content'  => 'My content',
         ]);
 
-        $otherAgentId = Agent::create([
-            'user_id'      => $userId,
-            'name'         => 'Other Agent',
-            'llm_provider' => 'mock',
-            'llm_model'    => 'mock',
-            'max_steps'    => 10,
-            'is_active'    => true,
-        ])->id;
+        $otherAgentId = createAgentWithPrincipal($userId, 'Other Agent', ['max_steps' => 10]);
         Memory::create([
             'user_id'  => $userId,
             'agent_id' => $otherAgentId,
@@ -556,17 +541,11 @@ describe('User isolation', function (): void {
     it('users cannot see each others global memories', function (): void {
         $authService1 = bootAuthLayer();
         $userId1 = bootAuth($authService1, 'user1@example.com', MEM_TEST_PASSWORD);
-        Agent::create([
-            'user_id' => $userId1, 'name' => 'Agent 1', 'llm_provider' => 'mock',
-            'llm_model' => 'mock', 'max_steps' => 10, 'is_active' => true,
-        ]);
+        createAgentWithPrincipal($userId1, 'Agent 1', ['max_steps' => 10]);
 
         $authService2 = bootAuthLayer();
         $userId2 = bootAuth($authService2, 'user2@example.com', MEM_TEST_PASSWORD);
-        $agentId2 = Agent::create([
-            'user_id' => $userId2, 'name' => 'Agent 2', 'llm_provider' => 'mock',
-            'llm_model' => 'mock', 'max_steps' => 10, 'is_active' => true,
-        ])->id;
+        $agentId2 = createAgentWithPrincipal($userId2, 'Agent 2', ['max_steps' => 10]);
 
         Memory::create([
             'user_id'  => $userId1,
@@ -584,17 +563,11 @@ describe('User isolation', function (): void {
     it('users cannot see each others agent memories', function (): void {
         $authService1 = bootAuthLayer();
         $userId1 = bootAuth($authService1, 'user3@example.com', MEM_TEST_PASSWORD);
-        $agentId1 = Agent::create([
-            'user_id' => $userId1, 'name' => 'Agent 1', 'llm_provider' => 'mock',
-            'llm_model' => 'mock', 'max_steps' => 10, 'is_active' => true,
-        ])->id;
+        $agentId1 = createAgentWithPrincipal($userId1, 'Agent 1', ['max_steps' => 10]);
 
         $authService2 = bootAuthLayer();
         $userId2 = bootAuth($authService2, 'user4@example.com', MEM_TEST_PASSWORD);
-        $agentId2 = Agent::create([
-            'user_id' => $userId2, 'name' => 'Agent 2', 'llm_provider' => 'mock',
-            'llm_model' => 'mock', 'max_steps' => 10, 'is_active' => true,
-        ])->id;
+        $agentId2 = createAgentWithPrincipal($userId2, 'Agent 2', ['max_steps' => 10]);
 
         Memory::create([
             'user_id'  => $userId1,

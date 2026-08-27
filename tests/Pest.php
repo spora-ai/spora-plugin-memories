@@ -102,6 +102,58 @@ function bootAuth(Spora\Auth\AuthService $authService, string $email = 'test@exa
     return $userId;
 }
 
+/**
+ * Materialise a user-principal row for the given user id and return the
+ * principal id. spora-core migration 0067 made `agents.principal_id` NOT NULL
+ * and dropped `agents.user_id`, so any test that builds an Agent through
+ * `Agent::create()` must go through this helper to satisfy the FK.
+ *
+ * Idempotent: returns the existing principal id when one already exists for
+ * this user (e.g. when the same test fixture is materialised twice in the
+ * same DB lifetime — the plugin tests boot a fresh in-memory SQLite per
+ * beforeEach so this only matters when a fixture helper is called twice in
+ * one test).
+ */
+function createUserPrincipal(int $userId): int
+{
+    $existing = Illuminate\Database\Capsule\Manager::table('principals')
+        ->where('type', 'user')->where('user_id', $userId)->value('id');
+    if ($existing !== null) {
+        return (int) $existing;
+    }
+    return (int) Illuminate\Database\Capsule\Manager::table('principals')->insertGetId([
+        'type'       => 'user',
+        'user_id'    => $userId,
+        'created_at' => date('Y-m-d H:i:s'),
+        'updated_at' => date('Y-m-d H:i:s'),
+    ]);
+}
+
+/**
+ * Materialise an Agent row backed by a freshly-built user-principal for the
+ * given user id. Returns the new agent id. Drop-in replacement for
+ * `Agent::create(['user_id' => $userId, ...])` after migration 0067 dropped
+ * the `agents.user_id` column.
+ *
+ * Pass `$extra` for any columns the test cares about (`max_steps`, custom
+ * names, etc.) — the keys here provide the minimum a mock agent needs.
+ * `llm_provider` / `llm_model` are intentionally NOT written: migration 0012
+ * dropped both columns, and the legacy `Agent::create(['llm_provider' =>
+ * 'mock'])` calls were silently no-ops against Eloquent's $fillable guard.
+ */
+function createAgentWithPrincipal(int $userId, string $name = 'Test Agent', array $extra = []): int
+{
+    $principalId = createUserPrincipal($userId);
+    return (int) Illuminate\Database\Capsule\Manager::table('agents')->insertGetId($extra + [
+        'principal_id' => $principalId,
+        'name'         => $name,
+        'max_steps'    => 5,
+        'is_active'    => true,
+        'created_at'   => date('Y-m-d H:i:s'),
+        'updated_at'   => date('Y-m-d H:i:s'),
+    ]);
+}
+
 uses()
     ->beforeEach(function () {
         Spora\Core\Database::resetBootState();
