@@ -13,26 +13,36 @@ use Spora\Services\Text\Utf8Sanitizer;
 
 /**
  * Service for memory management.
- * All DB access for Memory domain goes through this service.
+ * All DB access for the Memory domain goes through this service.
  *
- * `AgentNotFoundException` lives in `Spora\Services\Exceptions\` (a core class)
- * because Agent is a core model — moving the exception to the plugin namespace
- * would force callers outside the plugin to import two namespaces for the same
- * concept. The exception stays in core; this service throws it when the agent
- * for the requested memory is missing.
+ * `AgentNotFoundException` lives in `Spora\Services\Exceptions\` (a core
+ * class) because Agent is a core model — moving the exception to the
+ * plugin namespace would force callers outside the plugin to import two
+ * namespaces for the same concept. The exception stays in core; this
+ * service throws it when the agent for the requested memory is missing.
+ *
+ * Ownership model:
+ *   - Global memories  ⇒ `principal_id` (post-0067); user-principals are
+ *     created on demand by `PrincipalService::ensureUserPrincipal()` from
+ *     the controllers before any principal-id-bearing call lands here.
+ *   - Agent memories   ⇒ `agent_id`; the agent's principal changes do NOT
+ *     move these (the FK + CASCADE only fires on agent deletion, not on
+ *     principal transfer).
  */
 final class MemoryService implements MemoryServiceInterface
 {
+    /** @var list<string> */
+    public const DOCUMENT_TYPES = ['plan', 'documentation', 'examples', 'context'];
+
+    public const TYPE_NOT_ALLOWED_CODE     = 'TYPE_NOT_ALLOWED';
+    public const REPLACE_NOT_FOUND_CODE    = 'REPLACE_NOT_FOUND';
+    public const REPLACE_NOT_UNIQUE_CODE   = 'REPLACE_NOT_UNIQUE';
+
     private const DATETIME_FORMAT = 'Y-m-d H:i:s';
 
     /**
-     * Wraps each named string field in Utf8Sanitizer::scrubString. Non-string
-     * and absent fields pass through untouched. Used by the create / update
-     * paths so every byte that lands in `memories.summary` and
-     * `memories.content` is valid UTF-8.
-     *
      * @param array<string, mixed> $data
-     * @param string ...$fields field names to scrub when present
+     * @param string ...$fields
      * @return array<string, mixed>
      */
     private static function scrubStringFields(array $data, string ...$fields): array
@@ -45,57 +55,39 @@ final class MemoryService implements MemoryServiceInterface
         return $data;
     }
 
-
-    public function listGlobalMemories(int $userId): array
+    public function listGlobalMemories(int $principalId, ?string $type = null): array
     {
-        $memories = Memory::global()
-            ->where('user_id', $userId)
-            ->orderBy('order')
-            ->orderBy('name')
-            ->get()
-            ->map(fn(Memory $m) => $this->resource($m));
+        $query = Memory::forPrincipal($principalId)->orderBy('order')->orderBy('name');
+        if ($type !== null) {
+            $this->validateType($type);
+            $query->ofType($type);
+        }
 
-        return $memories->all();
+        return $query->get()
+            ->map(fn(Memory $m) => $this->resource($m))
+            ->all();
     }
 
-    public function listAgentMemories(int $agentId, int $userId): ?array
+    public function listAgentMemories(int $agentId, int $principalId, ?string $type = null): ?array
     {
-        $agent = $this->findAgent($agentId, $userId);
-        if ($agent === null) {
+        if ($this->findAgent($agentId, $principalId) === null) {
             return null;
         }
 
-        $memories = Memory::forAgent($agentId)
-            ->orderBy('order')
-            ->orderBy('name')
-            ->get()
-            ->map(fn(Memory $m) => $this->resource($m));
+        $query = Memory::forAgent($agentId)->orderBy('order')->orderBy('name');
+        if ($type !== null) {
+            $this->validateType($type);
+            $query->ofType($type);
+        }
 
-        return $memories->all();
+        return $query->get()
+            ->map(fn(Memory $m) => $this->resource($m))
+            ->all();
     }
 
-    public function getGlobalMemory(int $memoryId, int $userId): ?array
+    public function getGlobalMemory(string $memoryId, int $principalId): ?array
     {
-        $memory = Memory::find($memoryId);
-        if ($memory === null) {
-            return null;
-        }
-
-        if ($memory->agent_id !== null || $memory->user_id !== $userId) {
-            return null;
-        }
-
-        return ['memory' => $this->resource($memory)];
-    }
-
-    public function getAgentMemory(int $memoryId, int $agentId, int $userId): ?array
-    {
-        $agent = $this->findAgent($agentId, $userId);
-        if ($agent === null) {
-            return null;
-        }
-
-        $memory = Memory::where('id', $memoryId)->where('agent_id', $agentId)->first();
+        $memory = Memory::where('id', $memoryId)->where('principal_id', $principalId)->where('scope', 'global')->first();
         if ($memory === null) {
             return null;
         }
@@ -103,193 +95,271 @@ final class MemoryService implements MemoryServiceInterface
         return ['memory' => $this->resource($memory)];
     }
 
-    public function createGlobalMemory(int $userId, array $data): array
+    public function getAgentMemory(string $memoryId, int $agentId, int $principalId): ?array
+    {
+        if ($this->findAgent($agentId, $principalId) === null) {
+            return null;
+        }
+
+        $memory = Memory::where('id', $memoryId)->where('agent_id', $agentId)->where('scope', 'agent')->first();
+        if ($memory === null) {
+            return null;
+        }
+
+        return ['memory' => $this->resource($memory)];
+    }
+
+    public function createGlobalMemory(int $principalId, array $data): array
     {
         $this->validate($data, isCreation: true);
 
         $payload = self::scrubStringFields($data, 'summary', 'content');
-        $id = Capsule::table('memories')->insertGetId([
-            'user_id'    => $userId,
-            'agent_id'   => null,
-            'name'       => $data['name'],
-            'summary'    => isset($payload['summary']) ? trim((string) $payload['summary']) : null,
-            'content'    => isset($payload['content']) ? trim((string) $payload['content']) : null,
-            'order'      => $this->getNextOrder(null, $userId),
-            'created_at' => date(self::DATETIME_FORMAT),
-            'updated_at' => date(self::DATETIME_FORMAT),
-        ]);
-
-        $memory = Memory::findOrFail($id);
+        $now = date(self::DATETIME_FORMAT);
+        $memory = new Memory();
+        $memory->id           = $memory->newUniqueId();
+        $memory->principal_id = $principalId;
+        $memory->scope        = 'global';
+        $memory->type         = $data['type'];
+        $memory->name         = $data['name'];
+        $memory->summary      = isset($payload['summary']) ? trim((string) $payload['summary']) : null;
+        $memory->content      = isset($payload['content']) ? trim((string) $payload['content']) : null;
+        $memory->order        = $this->getNextOrder(null, $principalId);
+        $this->insertWithTimestamps($memory, $now);
 
         return ['memory' => $this->resource($memory)];
     }
 
-    public function createAgentMemory(int $agentId, int $userId, array $data): array
+    public function createAgentMemory(int $agentId, int $principalId, array $data): array
     {
-        $agent = $this->findAgent($agentId, $userId);
-        if ($agent === null) {
+        if ($this->findAgent($agentId, $principalId) === null) {
             throw new AgentNotFoundException('Agent not found');
         }
 
         $this->validate($data, isCreation: true);
 
         $payload = self::scrubStringFields($data, 'summary', 'content');
-        $id = Capsule::table('memories')->insertGetId([
-            'user_id'    => $userId,
-            'agent_id'   => $agentId,
-            'name'       => $data['name'],
-            'summary'    => isset($payload['summary']) ? trim((string) $payload['summary']) : null,
-            'content'    => isset($payload['content']) ? trim((string) $payload['content']) : null,
-            'order'      => $this->getNextOrder($agentId, $userId),
-            'created_at' => date(self::DATETIME_FORMAT),
-            'updated_at' => date(self::DATETIME_FORMAT),
+        $now = date(self::DATETIME_FORMAT);
+        $memory = new Memory();
+        $memory->id        = $memory->newUniqueId();
+        $memory->agent_id  = $agentId;
+        $memory->scope     = 'agent';
+        $memory->type      = $data['type'];
+        $memory->name      = $data['name'];
+        $memory->summary   = isset($payload['summary']) ? trim((string) $payload['summary']) : null;
+        $memory->content   = isset($payload['content']) ? trim((string) $payload['content']) : null;
+        $memory->order     = $this->getNextOrder($agentId, $principalId);
+        $this->insertWithTimestamps($memory, $now);
+
+        return ['memory' => $this->resource($memory)];
+    }
+
+    public function updateGlobalMemory(string $memoryId, int $principalId, array $data): ?array
+    {
+        $memory = Memory::where('id', $memoryId)->where('principal_id', $principalId)->where('scope', 'global')->first();
+        if ($memory === null) {
+            return null;
+        }
+
+        $this->validate($data, isCreation: false);
+
+        $allowed = ['name', 'summary', 'content', 'order', 'type'];
+        $updateData = array_intersect_key($data, array_flip($allowed));
+        if (isset($updateData['type'])) {
+            $this->validateType($updateData['type']);
+        }
+
+        if ($updateData !== []) {
+            if (isset($updateData['order'])) {
+                $updateData['order'] = (int) $updateData['order'];
+            }
+            $updateData = self::scrubStringFields($updateData, 'summary', 'content');
+            Capsule::table('memories')
+                ->where('id', $memoryId)
+                ->update(array_merge($updateData, ['updated_at' => date(self::DATETIME_FORMAT)]));
+            $memory->refresh();
+        }
+
+        return ['memory' => $this->resource($memory)];
+    }
+
+    public function updateAgentMemory(string $memoryId, int $agentId, int $principalId, array $data): ?array
+    {
+        if ($this->findAgent($agentId, $principalId) === null) {
+            return null;
+        }
+
+        $memory = Memory::where('id', $memoryId)->where('agent_id', $agentId)->where('scope', 'agent')->first();
+        if ($memory === null) {
+            return null;
+        }
+
+        $this->validate($data, isCreation: false);
+
+        $allowed = ['name', 'summary', 'content', 'order', 'type'];
+        $updateData = array_intersect_key($data, array_flip($allowed));
+        if (isset($updateData['type'])) {
+            $this->validateType($updateData['type']);
+        }
+
+        if ($updateData !== []) {
+            if (isset($updateData['order'])) {
+                $updateData['order'] = (int) $updateData['order'];
+            }
+            $updateData = self::scrubStringFields($updateData, 'summary', 'content');
+            Capsule::table('memories')
+                ->where('id', $memoryId)
+                ->update(array_merge($updateData, ['updated_at' => date(self::DATETIME_FORMAT)]));
+            $memory->refresh();
+        }
+
+        return ['memory' => $this->resource($memory)];
+    }
+
+    public function replaceGlobalMemory(string $memoryId, int $principalId, array $data): ?array
+    {
+        $memory = Memory::where('id', $memoryId)->where('principal_id', $principalId)->where('scope', 'global')->first();
+        if ($memory === null) {
+            return null;
+        }
+
+        $find = (string) ($data['find'] ?? '');
+        $newText = (string) ($data['new_text'] ?? '');
+        $memory->content = $this->replaceInMemoryContent((string) ($memory->content ?? ''), $find, $newText);
+        $memory->save();
+        $this->touchUpdatedAt((string) $memory->id);
+
+        return ['memory' => $this->resource($memory->refresh())];
+    }
+
+    public function replaceAgentMemory(string $memoryId, int $agentId, int $principalId, array $data): ?array
+    {
+        if ($this->findAgent($agentId, $principalId) === null) {
+            return null;
+        }
+
+        $memory = Memory::where('id', $memoryId)->where('agent_id', $agentId)->where('scope', 'agent')->first();
+        if ($memory === null) {
+            return null;
+        }
+
+        $find = (string) ($data['find'] ?? '');
+        $newText = (string) ($data['new_text'] ?? '');
+        $memory->content = $this->replaceInMemoryContent((string) ($memory->content ?? ''), $find, $newText);
+        $memory->save();
+        $this->touchUpdatedAt((string) $memory->id);
+
+        return ['memory' => $this->resource($memory->refresh())];
+    }
+
+    public function deleteGlobalMemory(string $memoryId, int $principalId): bool
+    {
+        $deleted = Capsule::table('memories')
+            ->where('id', $memoryId)
+            ->where('principal_id', $principalId)
+            ->where('scope', 'global')
+            ->delete();
+
+        return $deleted > 0;
+    }
+
+    /**
+     * Insert a row with explicit timestamp strings. Eloquent's `$casts`
+     * declares `created_at`/`updated_at` as Carbon, which prevents PHPStan
+     * from accepting a raw `Y-m-d H:i:s` string. Building the insert via
+     * the query builder keeps PHPStan happy while letting the model's
+     * HasUuids trait own the id.
+     */
+    private function insertWithTimestamps(Memory $memory, string $now): void
+    {
+        Capsule::table('memories')->insert([
+            'id'           => $memory->id,
+            'principal_id' => $memory->principal_id,
+            'agent_id'     => $memory->agent_id,
+            'scope'        => $memory->scope,
+            'type'         => $memory->type,
+            'name'         => $memory->name,
+            'summary'      => $memory->summary,
+            'content'      => $memory->content,
+            'order'        => $memory->order,
+            'created_at'   => $now,
+            'updated_at'   => $now,
         ]);
-
-        $memory = Memory::findOrFail($id);
-
-        return ['memory' => $this->resource($memory)];
+        // Repopulate the Carbon accessors so the resource() round-trip yields
+        // a populated created_at/updated_at without a second SELECT.
+        $memory->setRawAttributes([
+            'id'           => $memory->id,
+            'principal_id' => $memory->principal_id,
+            'agent_id'     => $memory->agent_id,
+            'scope'        => $memory->scope,
+            'type'         => $memory->type,
+            'name'         => $memory->name,
+            'summary'      => $memory->summary,
+            'content'      => $memory->content,
+            'order'        => $memory->order,
+            'created_at'   => $now,
+            'updated_at'   => $now,
+        ], true);
     }
 
-    public function updateGlobalMemory(int $memoryId, int $userId, array $data): ?array
+    public function deleteAgentMemory(string $memoryId, int $agentId, int $principalId): bool
     {
-        $memory = Memory::find($memoryId);
-        if ($memory === null) {
-            return null;
-        }
-
-        if ($memory->agent_id !== null || $memory->user_id !== $userId) {
-            return null;
-        }
-
-        $this->validate($data, isCreation: false);
-
-        $allowed = ['name', 'summary', 'content', 'order'];
-        $updateData = array_intersect_key($data, array_flip($allowed));
-
-        if ($updateData !== []) {
-            if (isset($updateData['order'])) {
-                $updateData['order'] = (int) $updateData['order'];
-            }
-            $updateData = self::scrubStringFields($updateData, 'summary', 'content');
-            Capsule::table('memories')
-                ->where('id', $memoryId)
-                ->update(array_merge($updateData, ['updated_at' => date(self::DATETIME_FORMAT)]));
-            $memory->refresh();
-        }
-
-        return ['memory' => $this->resource($memory)];
-    }
-
-    public function updateAgentMemory(int $memoryId, int $agentId, int $userId, array $data): ?array
-    {
-        $agent = $this->findAgent($agentId, $userId);
-        if ($agent === null) {
-            return null;
-        }
-
-        $memory = Memory::where('id', $memoryId)->where('agent_id', $agentId)->first();
-        if ($memory === null) {
-            return null;
-        }
-
-        $this->validate($data, isCreation: false);
-
-        $allowed = ['name', 'summary', 'content', 'order'];
-        $updateData = array_intersect_key($data, array_flip($allowed));
-
-        if ($updateData !== []) {
-            if (isset($updateData['order'])) {
-                $updateData['order'] = (int) $updateData['order'];
-            }
-            $updateData = self::scrubStringFields($updateData, 'summary', 'content');
-            Capsule::table('memories')
-                ->where('id', $memoryId)
-                ->update(array_merge($updateData, ['updated_at' => date(self::DATETIME_FORMAT)]));
-            $memory->refresh();
-        }
-
-        return ['memory' => $this->resource($memory)];
-    }
-
-    public function deleteGlobalMemory(int $memoryId, int $userId): bool
-    {
-        $memory = Memory::find($memoryId);
-        if ($memory === null) {
+        if ($this->findAgent($agentId, $principalId) === null) {
             return false;
         }
 
-        if ($memory->agent_id !== null || $memory->user_id !== $userId) {
-            return false;
-        }
+        $deleted = Capsule::table('memories')
+            ->where('id', $memoryId)
+            ->where('agent_id', $agentId)
+            ->where('scope', 'agent')
+            ->delete();
 
-        Capsule::table('memories')->where('id', $memoryId)->delete();
-
-        return true;
+        return $deleted > 0;
     }
 
-    public function deleteAgentMemory(int $memoryId, int $agentId, int $userId): bool
+    /**
+     * Bump updated_at via raw SQL — sidesteps PHPStan's strict typing on
+     * `$memory->updated_at` (cast to `Carbon\Carbon`) while keeping Eloquent's
+     * mutator pipeline for everything else.
+     */
+    private function touchUpdatedAt(string $memoryId): void
     {
-        $agent = $this->findAgent($agentId, $userId);
-        if ($agent === null) {
-            return false;
-        }
-
-        $memory = Memory::where('id', $memoryId)->where('agent_id', $agentId)->first();
-        if ($memory === null) {
-            return false;
-        }
-
-        Capsule::table('memories')->where('id', $memoryId)->delete();
-
-        return true;
+        Capsule::table('memories')
+            ->where('id', $memoryId)
+            ->update(['updated_at' => date(self::DATETIME_FORMAT)]);
     }
 
-    private function findAgent(int $id, int $userId): ?Agent
+    private function findAgent(int $id, int $principalId): ?Agent
     {
-        // Resolve via the user-principal — spora-core migration 0067 dropped
-        // agents.user_id and made agents.principal_id the ownership column.
-        // SQLite silently treats an unknown double-quoted identifier as a
-        // string literal (so the previous `where('user_id', $userId)` was a
-        // no-op that returned null for every row), which manifested as a
-        // blanket AgentNotFoundException in tests.
-        $principalId = Capsule::table('principals')
-            ->where('type', 'user')
-            ->where('user_id', $userId)
-            ->value('id');
-        if ($principalId === null) {
-            return null;
-        }
         return Agent::where('id', $id)->where('principal_id', $principalId)->first();
     }
 
-    private function getNextOrder(?int $agentId, int $userId): int
+    private function getNextOrder(?int $agentId, int $principalId): int
     {
-        $query = Memory::where('user_id', $userId);
-        if ($agentId !== null) {
-            $query->where('agent_id', $agentId);
+        $query = Memory::where('scope', $agentId === null ? 'global' : 'agent');
+        if ($agentId === null) {
+            $query->where('principal_id', $principalId);
         } else {
-            $query->whereNull('agent_id');
+            $query->where('agent_id', $agentId);
         }
         $max = $query->max('order');
 
         return $max !== null ? ((int) $max) + 1 : 1;
     }
 
-    public function reorderGlobalMemories(int $userId, array $orderedIds): void
+    public function reorderGlobalMemories(int $principalId, array $orderedIds): void
     {
         foreach ($orderedIds as $index => $memoryId) {
             Capsule::table('memories')
                 ->where('id', $memoryId)
-                ->where('user_id', $userId)
-                ->whereNull('agent_id')
+                ->where('principal_id', $principalId)
+                ->where('scope', 'global')
                 ->update(['order' => $index + 1, 'updated_at' => date(self::DATETIME_FORMAT)]);
         }
     }
 
-    public function reorderAgentMemories(int $agentId, int $userId, array $orderedIds): void
+    public function reorderAgentMemories(int $agentId, int $principalId, array $orderedIds): void
     {
-        $agent = $this->findAgent($agentId, $userId);
-        if ($agent === null) {
+        if ($this->findAgent($agentId, $principalId) === null) {
             throw new AgentNotFoundException('Agent not found');
         }
 
@@ -299,6 +369,7 @@ final class MemoryService implements MemoryServiceInterface
             $updated = Capsule::table('memories')
                 ->where('id', $memoryId)
                 ->where('agent_id', $agentId)
+                ->where('scope', 'agent')
                 ->update(['order' => $order, 'updated_at' => date(self::DATETIME_FORMAT)]);
             if ($updated > 0) {
                 $order++;
@@ -306,6 +377,9 @@ final class MemoryService implements MemoryServiceInterface
         }
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private function validate(array $data, bool $isCreation): void
     {
         if ($isCreation) {
@@ -313,25 +387,69 @@ final class MemoryService implements MemoryServiceInterface
             if ($name === '') {
                 throw new MemoryValidationException('name is required');
             }
+            $type = $data['type'] ?? null;
+            if (!is_string($type) || $type === '') {
+                throw new MemoryValidationException('type is required');
+            }
+            $this->validateType($type);
             return;
         }
         if (array_key_exists('name', $data) && trim((string) $data['name']) === '') {
             throw new MemoryValidationException('name cannot be empty');
         }
+        if (array_key_exists('type', $data)) {
+            if (!is_string($data['type']) || $data['type'] === '') {
+                throw new MemoryValidationException('type cannot be empty');
+            }
+            $this->validateType($data['type']);
+        }
     }
 
+    public function validateType(string $type): void
+    {
+        if (!in_array($type, self::DOCUMENT_TYPES, true)) {
+            throw new MemoryValidationException(
+                sprintf(
+                    "type '%s' is not one of: %s",
+                    $type,
+                    implode(', ', self::DOCUMENT_TYPES),
+                ),
+            );
+        }
+    }
+
+    public function replaceInMemoryContent(string $current, string $find, string $newText): string
+    {
+        $count = mb_substr_count($current, $find);
+        if ($count === 0) {
+            throw new MemoryValidationException("find matches 0 occurrences.");
+        }
+        if ($count > 1) {
+            throw new MemoryValidationException(
+                "find matches {$count} > 1 occurrences; provide a unique substring.",
+            );
+        }
+
+        return Utf8Sanitizer::scrubString(str_replace($find, $newText, $current));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     private function resource(Memory $memory): array
     {
         return [
-            'id'         => (int) $memory->id,
-            'user_id'    => $memory->user_id !== null ? (int) $memory->user_id : null,
-            'agent_id'   => $memory->agent_id !== null ? (int) $memory->agent_id : null,
-            'name'       => $memory->name,
-            'summary'    => $memory->summary,
-            'content'    => $memory->content,
-            'order'      => (int) $memory->order,
-            'created_at' => $memory->created_at->toIso8601String(),
-            'updated_at' => $memory->updated_at->toIso8601String(),
+            'id'           => (string) $memory->id,
+            'principal_id' => $memory->principal_id !== null ? (int) $memory->principal_id : null,
+            'agent_id'     => $memory->agent_id !== null ? (int) $memory->agent_id : null,
+            'scope'        => (string) $memory->scope,
+            'type'         => (string) $memory->type,
+            'name'         => $memory->name,
+            'summary'      => $memory->summary,
+            'content'      => $memory->content,
+            'order'        => (int) $memory->order,
+            'created_at'   => $memory->created_at->toIso8601String(),
+            'updated_at'   => $memory->updated_at->toIso8601String(),
         ];
     }
 }

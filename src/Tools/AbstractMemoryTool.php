@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Memories\Tools;
 
-use Spora\Models\Agent;
+use RuntimeException;
 use Spora\Plugins\Memories\Models\Memory;
+use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
+use Spora\Plugins\Memories\Services\MemoryService;
 use Spora\Services\PrincipalContext;
 use Spora\Services\Text\Utf8Sanitizer;
 use Spora\Tools\AbstractTool;
@@ -13,23 +15,27 @@ use Spora\Tools\Attributes\ToolParameter;
 use Spora\Tools\ValueObjects\ToolResult;
 
 /**
- * Abstract base for memory tools that provide list, get, save, and delete operations.
- * Subclasses define the scope (agent or global) via getScope().
+ * Abstract base for memory tools that provide list, get, save, delete, and
+ * replace operations. Subclasses define the scope (agent or global) via
+ * getScope().
  *
  * Extending AbstractTool gives the subclasses (AgentMemoryTool, GlobalMemoryTool)
- * the auto-generated parameter schema for free — they only need their own #[Tool]
- * declaration and an implementation of getScope().
+ * the auto-generated parameter schema for free — they only need their own
+ * #[Tool] declaration and an implementation of getScope().
  *
- * Memory writes are runner-scoped: the author of a memory is the user who
- * triggered the current task (`PrincipalContext::runnerUserId`), not the
- * agent's paying user (the legacy 3rd-arg `$userId`). Without this fix, a
- * group-context task would write the runner's note into the owner's
- * namespace and silently break per-user recall.
+ * Every memory written by this tool is attributed to the principal id on
+ * `PrincipalContext` (resolved upstream by the host). For global scope that
+ * is the user-principal; for agent scope it is the agent's owning principal.
+ * Agents that travel between principals (0067 transfer flow) keep their
+ * agent memories because the agent FK never changes.
  */
-#[ToolParameter(name: 'name', type: 'string', description: 'Unique name for the memory (e.g. "user_preferences", "project_context").', required: ['get', 'save', 'delete'])]
+#[ToolParameter(name: 'name', type: 'string', description: 'Unique name for the memory (e.g. "user_preferences", "project_context").', required: ['get', 'save', 'delete', 'replace'])]
+#[ToolParameter(name: 'type', type: 'string', description: "Document type: 'plan', 'documentation', 'examples', or 'context'.", required: ['save', 'replace', 'get'], enum: ['plan', 'documentation', 'examples', 'context'])]
 #[ToolParameter(name: 'content', type: 'string', description: 'Memory content in markdown. Required for save action.', required: ['save'])]
 #[ToolParameter(name: 'summary', type: 'string', description: 'Brief one-line summary for list view. Auto-derived from content if omitted.', required: false)]
 #[ToolParameter(name: 'order', type: 'integer', description: 'Sort order for listing. Defaults to 0.', required: false)]
+#[ToolParameter(name: 'find', type: 'string', description: 'Exact substring to replace in the memory content. Must be unique within the content.', required: ['replace'])]
+#[ToolParameter(name: 'new_text', type: 'string', description: 'Replacement text for the `find` substring.', required: ['replace'])]
 abstract class AbstractMemoryTool extends AbstractTool
 {
     abstract protected function getScope(): string;
@@ -44,24 +50,29 @@ abstract class AbstractMemoryTool extends AbstractTool
         $operation = $this->getOperationName($arguments);
         $scope = $this->getScope();
 
-        // Resolve the writer (runner of the task) once, up front. The runner
-        // is the author of any saves, and the scope anchor for list / get /
-        // delete so the runner only sees their own memories. Falls back to
-        // the legacy 3rd-arg `$userId` for callers that haven't migrated to
-        // PrincipalContext yet (controllers, tests).
-        if ($userId === null) {
-            $agent = Agent::find($agentId);
-            $userId = $agent?->user_id;
-        }
-        $writerId = $context !== null ? ($context->runnerUserId ?? $userId) : $userId;
+        $principalId = $this->resolvePrincipalId($context, $userId, $agentId);
 
         return match ($operation) {
-            'list'   => $this->list($scope, $agentId, $writerId),
-            'get'    => $this->get($arguments, $scope, $agentId, $writerId),
-            'save'   => $this->save($arguments, $scope, $agentId, $writerId),
-            'delete' => $this->delete($arguments, $scope, $agentId, $writerId),
-            default  => new ToolResult(false, 'Invalid action. Must be list, get, save, or delete.'),
+            'list'    => $this->list($scope, $agentId, $principalId, $arguments),
+            'get'     => $this->getMemory($arguments, $scope, $agentId, $principalId),
+            'save'    => $this->saveMemory($arguments, $scope, $agentId, $principalId),
+            'replace' => $this->replaceMemory($arguments, $scope, $agentId, $principalId),
+            'delete'  => $this->deleteMemory($arguments, $scope, $agentId, $principalId),
+            default   => new ToolResult(false, 'Invalid action. Must be list, get, save, replace, or delete.'),
         };
+    }
+
+    private function resolvePrincipalId(?PrincipalContext $context, ?int $userId, int $agentId): int
+    {
+        if ($context !== null) {
+            return $context->principalId;
+        }
+        if ($userId !== null) {
+            return $userId;
+        }
+        throw new RuntimeException(
+            'Cannot resolve principal id for memory tool execution: no PrincipalContext and no legacy userId fallback.',
+        );
     }
 
     public function describeAction(array $arguments): string
@@ -71,17 +82,19 @@ abstract class AbstractMemoryTool extends AbstractTool
         return "Memory {$op}: {$name}";
     }
 
-    public function list(string $scope, int $agentId, ?int $userId = null): ToolResult
+    public function list(string $scope, int $agentId, int $principalId, array $arguments = []): ToolResult
     {
+        $type = isset($arguments['type']) ? (string) $arguments['type'] : null;
+
         if ($scope === 'global') {
-            $query = Memory::global();
-            if ($userId !== null) {
-                $query->where('user_id', $userId);
-            }
-            $memories = $query->orderBy('order')->orderBy('name')->get();
+            $query = Memory::forPrincipal($principalId);
         } else {
-            $memories = Memory::forAgent($agentId)->orderBy('order')->orderBy('name')->get();
+            $query = Memory::forAgent($agentId);
         }
+        if ($type !== null && $type !== '') {
+            $query->ofType($type);
+        }
+        $memories = $query->orderBy('order')->orderBy('name')->get();
 
         if ($memories->isEmpty()) {
             return new ToolResult(true, "No memories found in {$scope} scope.");
@@ -90,25 +103,31 @@ abstract class AbstractMemoryTool extends AbstractTool
         $lines = ["Found {$memories->count()} memory(ies) in {$scope} scope:"];
         foreach ($memories as $m) {
             $summary = $m->summary !== null ? " — {$m->summary}" : '';
-            $lines[] = "- [{$m->name}]{$summary}";
+            $typeTag = " [{$m->type}]";
+            $lines[] = "- [{$m->name}]{$typeTag}{$summary}";
         }
 
         return new ToolResult(true, implode("\n", $lines));
     }
 
-    public function get(array $arguments, string $scope, int $agentId, ?int $userId = null): ToolResult
+    public function getMemory(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
         $name = trim((string) ($arguments['name'] ?? ''));
         if ($name === '') {
             return new ToolResult(false, 'Error: name is required for get action.');
         }
 
-        $memory = $this->findMemory($name, $scope, $agentId, $userId);
-        if ($memory === null) {
-            return new ToolResult(false, "Memory [{$name}] not found in {$scope} scope.");
+        $type = (string) ($arguments['type'] ?? '');
+        if ($type === '') {
+            return new ToolResult(false, 'Error: type is required for get action.');
         }
 
-        $header = "# {$memory->name}";
+        $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
+        if ($memory === null) {
+            return new ToolResult(false, "Memory [{$name}] (type={$type}) not found in {$scope} scope.");
+        }
+
+        $header = "# {$memory->name} ({$memory->type})";
         if ($memory->summary !== null) {
             $header .= "\n*Summary: {$memory->summary}*";
         }
@@ -117,51 +136,74 @@ abstract class AbstractMemoryTool extends AbstractTool
         return new ToolResult(true, $header . ($memory->content ?? ''));
     }
 
-    public function save(array $arguments, string $scope, int $agentId, ?int $userId = null): ToolResult
+    public function saveMemory(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
         $name = trim((string) ($arguments['name'] ?? ''));
         if ($name === '') {
             return new ToolResult(false, 'Error: name is required for save action.');
         }
 
+        $type = (string) ($arguments['type'] ?? '');
+        if ($type === '') {
+            return new ToolResult(false, 'Error: type is required for save action.');
+        }
+
         $content = (string) ($arguments['content'] ?? '');
         $summary = isset($arguments['summary']) ? trim((string) $arguments['summary']) : null;
         $order = isset($arguments['order']) ? (int) $arguments['order'] : 0;
 
-        $query = Memory::where('name', $name);
-        $this->applyScopeFilter($query, $scope, $agentId, $userId);
+        try {
+            $this->validateType($type);
+        } catch (MemoryValidationException $e) {
+            return new ToolResult(false, "Error: {$e->getMessage()}");
+        }
 
-        $memory = $query->first();
+        $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
         if ($memory !== null) {
             $this->updateMemoryFields($memory, $content, $summary, $order);
-            return new ToolResult(true, "Updated memory [{$name}] in {$scope} scope.");
+            return new ToolResult(true, "Updated memory [{$name}] (type={$type}) in {$scope} scope.");
         }
 
         $summary ??= $this->deriveSummary($content);
-        Memory::create($this->buildCreateData($scope, $agentId, $userId, $name, $summary, $content, $order));
+        $this->createMemory($scope, $agentId, $principalId, $name, $type, $summary, $content, $order);
 
-        return new ToolResult(true, "Created memory [{$name}] in {$scope} scope.");
+        return new ToolResult(true, "Created memory [{$name}] (type={$type}) in {$scope} scope.");
     }
 
-    // Helpers extracted from save() to keep its cognitive complexity below SonarQube's
-    // php:S3776 threshold. The scope/userId filter and create-data rules are non-trivial
-    // branches, and inlining them inflated the method's complexity past the limit.
-    //
-    // The `$userId` parameter here is the writer id (resolved at the top of
-    // execute() via PrincipalContext::runnerUserId ?? legacy $userId). The
-    // parameter name is kept as `$userId` so existing positional callers don't
-    // break — semantically it is now the runner id.
-
-    private function applyScopeFilter($query, string $scope, int $agentId, ?int $userId): void
+    public function replaceMemory(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
-        if ($scope === 'global') {
-            $query->whereNull('agent_id');
-            if ($userId !== null) {
-                $query->where('user_id', $userId);
-            }
-        } else {
-            $query->where('agent_id', $agentId);
+        $name = trim((string) ($arguments['name'] ?? ''));
+        if ($name === '') {
+            return new ToolResult(false, 'Error: name is required for replace action.');
         }
+
+        $type = (string) ($arguments['type'] ?? '');
+        if ($type === '') {
+            return new ToolResult(false, 'Error: type is required for replace action.');
+        }
+
+        $find = (string) ($arguments['find'] ?? '');
+        $newText = (string) ($arguments['new_text'] ?? '');
+        if ($find === '') {
+            return new ToolResult(false, 'Error: find is required for replace action.');
+        }
+
+        $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
+        if ($memory === null) {
+            return new ToolResult(false, "Memory [{$name}] (type={$type}) not found in {$scope} scope.");
+        }
+
+        try {
+            $memory->content = $this->replaceInMemoryContent((string) ($memory->content ?? ''), $find, $newText);
+        } catch (MemoryValidationException $e) {
+            return new ToolResult(false, $e->getMessage());
+        }
+        $memory->save();
+        \Illuminate\Database\Capsule\Manager::table('memories')
+            ->where('id', $memory->id)
+            ->update(['updated_at' => gmdate('Y-m-d H:i:s')]);
+
+        return new ToolResult(true, "Replaced 1 occurrence in [{$name}] (type={$type}).");
     }
 
     private function updateMemoryFields(Memory $memory, string $content, ?string $summary, int $order): void
@@ -174,21 +216,22 @@ abstract class AbstractMemoryTool extends AbstractTool
         $memory->save();
     }
 
-    private function buildCreateData(string $scope, int $agentId, ?int $userId, string $name, ?string $summary, string $content, int $order): array
+    private function createMemory(string $scope, int $agentId, int $principalId, string $name, string $type, ?string $summary, string $content, int $order): void
     {
-        $data = [
-            'agent_id' => $scope === 'agent' ? $agentId : null,
-            'name'     => $name,
-            'summary'  => $summary,
-            'content'  => $content,
-            'order'    => $order,
-        ];
-
-        if (($scope === 'global' && $userId !== null) || $scope === 'agent') {
-            $data['user_id'] = $userId;
+        $memory = new Memory();
+        if ($scope === 'global') {
+            $memory->principal_id = $principalId;
+            $memory->scope = 'global';
+        } else {
+            $memory->agent_id = $agentId;
+            $memory->scope = 'agent';
         }
-
-        return $data;
+        $memory->type    = $type;
+        $memory->name    = $name;
+        $memory->summary = $summary !== null ? Utf8Sanitizer::scrubString($summary) : null;
+        $memory->content = Utf8Sanitizer::scrubString($content);
+        $memory->order   = $order;
+        $memory->save();
     }
 
     private function deriveSummary(string $content): ?string
@@ -196,43 +239,61 @@ abstract class AbstractMemoryTool extends AbstractTool
         return $content !== '' ? mb_substr(strip_tags($content), 0, 200) : null;
     }
 
-    public function delete(array $arguments, string $scope, int $agentId, ?int $userId = null): ToolResult
+    public function deleteMemory(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
         $name = trim((string) ($arguments['name'] ?? ''));
         if ($name === '') {
             return new ToolResult(false, 'Error: name is required for delete action.');
         }
 
-        $query = Memory::where('name', $name);
-        if ($scope === 'global') {
-            $query->whereNull('agent_id');
-            if ($userId !== null) {
-                $query->where('user_id', $userId);
-            }
-        } else {
-            $query->where('agent_id', $agentId);
+        $type = (string) ($arguments['type'] ?? '');
+        if ($type === '') {
+            return new ToolResult(false, 'Error: type is required for delete action.');
         }
 
-        $deleted = $query->delete();
-        if ($deleted) {
-            return new ToolResult(true, "Deleted memory [{$name}] from {$scope} scope.");
+        $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
+        if ($memory === null) {
+            return new ToolResult(false, "Memory [{$name}] (type={$type}) not found in {$scope} scope.");
         }
+        $memory->delete();
 
-        return new ToolResult(false, "Memory [{$name}] not found in {$scope} scope.");
+        return new ToolResult(true, "Deleted memory [{$name}] (type={$type}) from {$scope} scope.");
     }
 
-    private function findMemory(string $name, string $scope, int $agentId, ?int $userId = null): ?Memory
+    private function findMemory(string $name, string $type, string $scope, int $agentId, int $principalId): ?Memory
     {
-        $query = Memory::where('name', $name);
         if ($scope === 'global') {
-            $query->whereNull('agent_id');
-            if ($userId !== null) {
-                $query->where('user_id', $userId);
-            }
+            $query = Memory::forPrincipal($principalId);
         } else {
-            $query->where('agent_id', $agentId);
+            $query = Memory::forAgent($agentId);
+        }
+        return $query->where('name', $name)->where('type', $type)->first();
+    }
+
+    private function replaceInMemoryContent(string $current, string $find, string $newText): string
+    {
+        $count = mb_substr_count($current, $find);
+        if ($count === 0) {
+            throw new MemoryValidationException("find matches 0 occurrences.");
+        }
+        if ($count > 1) {
+            throw new MemoryValidationException(
+                "find matches {$count} > 1 occurrences; provide a unique substring.",
+            );
         }
 
-        return $query->first();
+        return Utf8Sanitizer::scrubString(str_replace($find, $newText, $current));
+    }
+
+    /**
+     * @throws MemoryValidationException
+     */
+    private function validateType(string $type): void
+    {
+        if ($type === '' || !in_array($type, MemoryService::DOCUMENT_TYPES, true)) {
+            throw new MemoryValidationException(
+                sprintf("type '%s' is not one of: %s", $type, implode(', ', MemoryService::DOCUMENT_TYPES)),
+            );
+        }
     }
 }

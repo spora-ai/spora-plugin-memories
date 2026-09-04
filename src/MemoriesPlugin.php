@@ -15,14 +15,21 @@ use Spora\Plugins\Memories\Services\MemoryService;
 use Spora\Plugins\Memories\Services\MemoryServiceInterface;
 use Spora\Plugins\Memories\Tools\AgentMemoryTool;
 use Spora\Plugins\Memories\Tools\GlobalMemoryTool;
+use Spora\Services\PrincipalService;
 
 /**
  * Plugin entry point for the Memories feature.
  *
+ * Schema version 2 introduces four breaking changes versus v1:
+ *   1. memories.user_id → memories.principal_id  (post-0067 principal model)
+ *   2. auto-increment BIGINT id → UUIDv7 CHAR(36)  (non-enumerable, time-ordered)
+ *   3. implicit single-type → explicit `type` ENUM('plan','documentation','examples','context')
+ *   4. new `replace` operation on both tools + a new POST .../replace endpoint
+ *
  * Contributes one admin app (MemoriesApp), two LLM-callable tools
- * (`memory` agent-scoped, `global_memory` user-scoped), 12 REST routes
- * under `/api/v1/memories*`, DI bindings for the service and both
- * controllers, the `memories` migration, and the `memories-assistant`
+ * (`memory` agent-scoped, `global_memory` principal-scoped), 14 REST
+ * routes under `/api/v1/memories*`, DI bindings for the service and both
+ * controllers, the `memories` migrations, and the `memories-assistant`
  * agent template.
  */
 final class MemoriesPlugin extends AbstractPlugin
@@ -33,15 +40,19 @@ final class MemoriesPlugin extends AbstractPlugin
     }
 
     /**
-     * Wire the service interface → concrete class autowire + the two controllers.
-     * Invoked once per process during boot, before the container is built.
+     * Wire the service interface → concrete class autowire + the two
+     * controllers. Invoked once per process during boot, before the
+     * container is built.
      *
-     * Adding explicit bindings here is necessary because the host `App` does not
-     * know about `MemoryServiceInterface`; without these definitions, resolving
-     * either controller at request-dispatch time would fail with
-     * `EntryNotFoundException`. PHP-DI autowire resolves the
-     * `MemoryService(AuthService…)` ctor for us once we point the interface at
-     * the concrete class.
+     * Adding explicit bindings here is necessary because the host `App`
+     * does not know about `MemoryServiceInterface`; without these
+     * definitions, resolving either controller at request-dispatch time
+     * would fail with `EntryNotFoundException`. PHP-DI autowire resolves
+     * the `MemoryService(...)` ctor for us once we point the interface
+     * at the concrete class. `PrincipalService` is already globally
+     * registered in spora-core; we re-list it here so the plugin's
+     * container works when loaded standalone (e.g. in unit tests that
+     * skip the host boot path).
      *
      * @param ContainerBuilder $builder
      */
@@ -49,19 +60,21 @@ final class MemoriesPlugin extends AbstractPlugin
     {
         $builder->addDefinitions([
             MemoryServiceInterface::class => \DI\autowire(MemoryService::class),
-            MemoryController::class      => \DI\autowire(),
-            AgentMemoryController::class => \DI\autowire(),
-            AgentMemoryTool::class       => \DI\autowire(),
-            GlobalMemoryTool::class      => \DI\autowire(),
+            MemoryController::class        => \DI\autowire(),
+            AgentMemoryController::class   => \DI\autowire(),
+            AgentMemoryTool::class         => \DI\autowire(),
+            GlobalMemoryTool::class        => \DI\autowire(),
+            PrincipalService::class        => \DI\autowire(),
         ]);
     }
 
     /**
-     * Register the 12 `/api/v1/memories*` routes behind Auth + CSRF.
+     * Register the 14 `/api/v1/memories*` routes behind Auth + CSRF.
      *
-     * Invoked per request after the host's `RouteDefinitions::register()`. Path
-     * strings mirror spora-core's pre-extraction paths verbatim so the frontend
-     * bundle (which has been calling these endpoints since 0.8.x) Just Works.
+     * Invoked per request after the host's `RouteDefinitions::register()`.
+     * Path strings mirror spora-core's pre-extraction paths verbatim so
+     * the frontend bundle (which has been calling these endpoints since
+     * 0.8.x) Just Works.
      *
      * @param MiddlewareRouteCollector $r
      */
@@ -69,12 +82,13 @@ final class MemoriesPlugin extends AbstractPlugin
     {
         $auth = [AuthMiddleware::class, CsrfMiddleware::class];
 
-        // Global (user-scoped) memories
+        // Global (principal-scoped) memories
         $r->addRoute('GET', '/api/v1/memories', [MemoryController::class, 'index'], $auth);
         $r->addRoute('POST', '/api/v1/memories', [MemoryController::class, 'store'], $auth);
         $r->addRoute('PATCH', '/api/v1/memories/reorder', [MemoryController::class, 'reorder'], $auth);
         $r->addRoute('GET', '/api/v1/memories/{id}', [MemoryController::class, 'show'], $auth);
         $r->addRoute('PUT', '/api/v1/memories/{id}', [MemoryController::class, 'update'], $auth);
+        $r->addRoute('POST', '/api/v1/memories/{id}/replace', [MemoryController::class, 'replace'], $auth);
         $r->addRoute('DELETE', '/api/v1/memories/{id}', [MemoryController::class, 'destroy'], $auth);
 
         // Agent-scoped memories
@@ -83,6 +97,7 @@ final class MemoriesPlugin extends AbstractPlugin
         $r->addRoute('PATCH', '/api/v1/agents/{agentId}/memories/reorder', [AgentMemoryController::class, 'reorder'], $auth);
         $r->addRoute('GET', '/api/v1/agents/{agentId}/memories/{memoryId}', [AgentMemoryController::class, 'show'], $auth);
         $r->addRoute('PUT', '/api/v1/agents/{agentId}/memories/{memoryId}', [AgentMemoryController::class, 'update'], $auth);
+        $r->addRoute('POST', '/api/v1/agents/{agentId}/memories/{memoryId}/replace', [AgentMemoryController::class, 'replace'], $auth);
         $r->addRoute('DELETE', '/api/v1/agents/{agentId}/memories/{memoryId}', [AgentMemoryController::class, 'destroy'], $auth);
     }
 
@@ -109,7 +124,7 @@ final class MemoriesPlugin extends AbstractPlugin
 
     public function schemaVersion(): int
     {
-        return 1;
+        return 2;
     }
 
     public function migrationsPath(): string
