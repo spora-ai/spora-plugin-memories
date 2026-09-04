@@ -33,18 +33,8 @@ final class MemoryCommandService implements MemoryCommandInterface
     {
         $this->validate($data, isCreation: true);
 
-        $payload = self::scrubStringFields($data, 'summary', 'content');
-        $now = date(self::DATETIME_FORMAT);
-        $memory = new Memory();
-        $memory->id           = $memory->newUniqueId();
-        $memory->principal_id = $principalId;
-        $memory->scope        = 'global';
-        $memory->type         = $data['type'];
-        $memory->name         = $data['name'];
-        $memory->summary      = isset($payload['summary']) ? trim((string) $payload['summary']) : null;
-        $memory->content      = isset($payload['content']) ? trim((string) $payload['content']) : null;
-        $memory->order        = $this->getNextOrder(null, $principalId);
-        $this->insertWithTimestamps($memory, $now);
+        $memory = $this->newMemory('global', null, $principalId, $data);
+        $this->insertWithTimestamps($memory, date(self::DATETIME_FORMAT));
 
         return ['memory' => MemoryResource::toArray($memory)];
     }
@@ -57,20 +47,37 @@ final class MemoryCommandService implements MemoryCommandInterface
 
         $this->validate($data, isCreation: true);
 
-        $payload = self::scrubStringFields($data, 'summary', 'content');
-        $now = date(self::DATETIME_FORMAT);
-        $memory = new Memory();
-        $memory->id        = $memory->newUniqueId();
-        $memory->agent_id  = $agentId;
-        $memory->scope     = 'agent';
-        $memory->type      = $data['type'];
-        $memory->name      = $data['name'];
-        $memory->summary   = isset($payload['summary']) ? trim((string) $payload['summary']) : null;
-        $memory->content   = isset($payload['content']) ? trim((string) $payload['content']) : null;
-        $memory->order     = $this->getNextOrder($agentId, $principalId);
-        $this->insertWithTimestamps($memory, $now);
+        $memory = $this->newMemory('agent', $agentId, $principalId, $data);
+        $this->insertWithTimestamps($memory, date(self::DATETIME_FORMAT));
 
         return ['memory' => MemoryResource::toArray($memory)];
+    }
+
+    /**
+     * Materialise a fresh Memory row with the standard field set; the
+     * createGlobalMemory / createAgentMemory callers differ only in
+     * scope ('global' vs 'agent') and the corresponding owner id.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function newMemory(string $scope, ?int $agentId, int $principalId, array $data): Memory
+    {
+        $payload = self::scrubStringFields($data, 'summary', 'content');
+        $memory = new Memory();
+        $memory->id = $memory->newUniqueId();
+        if ($scope === 'global') {
+            $memory->principal_id = $principalId;
+        } else {
+            $memory->agent_id = $agentId;
+        }
+        $memory->scope = $scope;
+        $memory->type = $data['type'];
+        $memory->name = $data['name'];
+        $memory->summary = isset($payload['summary']) ? trim((string) $payload['summary']) : null;
+        $memory->content = isset($payload['content']) ? trim((string) $payload['content']) : null;
+        $memory->order = $this->getNextOrder($agentId, $principalId);
+
+        return $memory;
     }
 
     public function updateGlobalMemory(string $memoryId, int $principalId, array $data): ?array
@@ -80,24 +87,7 @@ final class MemoryCommandService implements MemoryCommandInterface
             return null;
         }
 
-        $this->validate($data, isCreation: false);
-
-        $allowed = ['name', 'summary', 'content', 'order', 'type'];
-        $updateData = array_intersect_key($data, array_flip($allowed));
-        if (isset($updateData['type'])) {
-            $this->validateType($updateData['type']);
-        }
-
-        if ($updateData !== []) {
-            if (isset($updateData['order'])) {
-                $updateData['order'] = (int) $updateData['order'];
-            }
-            $updateData = self::scrubStringFields($updateData, 'summary', 'content');
-            Capsule::table('memories')
-                ->where('id', $memoryId)
-                ->update(array_merge($updateData, ['updated_at' => date(self::DATETIME_FORMAT)]));
-            $memory->refresh();
-        }
+        $this->applyUpdate($memory, $data);
 
         return ['memory' => MemoryResource::toArray($memory)];
     }
@@ -113,6 +103,16 @@ final class MemoryCommandService implements MemoryCommandInterface
             return null;
         }
 
+        $this->applyUpdate($memory, $data);
+
+        return ['memory' => MemoryResource::toArray($memory)];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function applyUpdate(Memory $memory, array $data): void
+    {
         $this->validate($data, isCreation: false);
 
         $allowed = ['name', 'summary', 'content', 'order', 'type'];
@@ -127,12 +127,10 @@ final class MemoryCommandService implements MemoryCommandInterface
             }
             $updateData = self::scrubStringFields($updateData, 'summary', 'content');
             Capsule::table('memories')
-                ->where('id', $memoryId)
+                ->where('id', $memory->id)
                 ->update(array_merge($updateData, ['updated_at' => date(self::DATETIME_FORMAT)]));
             $memory->refresh();
         }
-
-        return ['memory' => MemoryResource::toArray($memory)];
     }
 
     public function replaceGlobalMemory(string $memoryId, int $principalId, array $data): ?array
@@ -142,13 +140,7 @@ final class MemoryCommandService implements MemoryCommandInterface
             return null;
         }
 
-        $find = (string) ($data['find'] ?? '');
-        $newText = (string) ($data['new_text'] ?? '');
-        $memory->content = $this->replaceInMemoryContent((string) ($memory->content ?? ''), $find, $newText);
-        $memory->save();
-        $this->touchUpdatedAt((string) $memory->id);
-
-        return ['memory' => MemoryResource::toArray($memory->refresh())];
+        return $this->applyReplace($memory, $data);
     }
 
     public function replaceAgentMemory(string $memoryId, int $agentId, int $principalId, array $data): ?array
@@ -162,6 +154,15 @@ final class MemoryCommandService implements MemoryCommandInterface
             return null;
         }
 
+        return $this->applyReplace($memory, $data);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array{memory: array<string, mixed>}
+     */
+    private function applyReplace(Memory $memory, array $data): array
+    {
         $find = (string) ($data['find'] ?? '');
         $newText = (string) ($data['new_text'] ?? '');
         $memory->content = $this->replaceInMemoryContent((string) ($memory->content ?? ''), $find, $newText);
