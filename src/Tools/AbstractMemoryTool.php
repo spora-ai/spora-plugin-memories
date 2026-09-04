@@ -47,15 +47,14 @@ abstract class AbstractMemoryTool extends AbstractTool
         ?PrincipalContext $context = null,
     ): ToolResult {
         $operation = $this->getOperationName($arguments);
-        $scope = $this->getScope();
         $principalId = $this->resolvePrincipalId($context, $userId);
 
         return match ($operation) {
-            'list'    => $this->describeList($scope, $agentId, $principalId, $arguments),
-            'get'     => $this->describeGet($arguments, $scope, $agentId, $principalId),
-            'save'    => $this->describeSave($arguments, $scope, $agentId, $principalId),
-            'replace' => $this->describeReplace($arguments, $scope, $agentId, $principalId),
-            'delete'  => $this->describeDelete($arguments, $scope, $agentId, $principalId),
+            'list'    => $this->runList($this->getScope(), $agentId, $principalId, $arguments),
+            'get'     => $this->runGet($arguments, $this->getScope(), $agentId, $principalId),
+            'save'    => $this->runSave($arguments, $this->getScope(), $agentId, $principalId),
+            'replace' => $this->runReplace($arguments, $this->getScope(), $agentId, $principalId),
+            'delete'  => $this->runDelete($arguments, $this->getScope(), $agentId, $principalId),
             default   => new ToolResult(false, 'Invalid action. Must be list, get, save, replace, or delete.'),
         };
     }
@@ -111,7 +110,7 @@ abstract class AbstractMemoryTool extends AbstractTool
     /**
      * @param array<string, mixed> $arguments
      */
-    private function describeList(string $scope, int $agentId, int $principalId, array $arguments): ToolResult
+    private function runList(string $scope, int $agentId, int $principalId, array $arguments): ToolResult
     {
         return $this->list($scope, $agentId, $principalId, $arguments);
     }
@@ -119,55 +118,43 @@ abstract class AbstractMemoryTool extends AbstractTool
     /**
      * @param array<string, mixed> $arguments
      */
-    private function describeGet(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
+    private function runGet(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
-        $name = trim((string) ($arguments['name'] ?? ''));
-        if ($name === '') {
-            return new ToolResult(false, 'Error: name is required for get action.');
+        $validationError = $this->requireNameAndType($arguments, 'get');
+        if ($validationError !== null) {
+            return $validationError;
         }
 
+        $name = trim((string) ($arguments['name'] ?? ''));
         $type = (string) ($arguments['type'] ?? '');
-        if ($type === '') {
-            return new ToolResult(false, 'Error: type is required for get action.');
-        }
 
         $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
         if ($memory === null) {
             return new ToolResult(false, "Memory [{$name}] (type={$type}) not found in {$scope} scope.");
         }
 
-        $header = "# {$memory->name} ({$memory->type})";
-        if ($memory->summary !== null) {
-            $header .= "\n*Summary: {$memory->summary}*";
-        }
-        $header .= "\n\n";
-
-        return new ToolResult(true, $header . ($memory->content ?? ''));
+        return new ToolResult(true, $this->renderMemoryBody($memory));
     }
 
     /**
      * @param array<string, mixed> $arguments
      */
-    private function describeSave(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
+    private function runSave(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
+        $validationError = $this->requireNameAndType($arguments, 'save');
+        if ($validationError !== null) {
+            return $validationError;
+        }
+
         $name = trim((string) ($arguments['name'] ?? ''));
-        if ($name === '') {
-            return new ToolResult(false, 'Error: name is required for save action.');
-        }
-
         $type = (string) ($arguments['type'] ?? '');
-        if ($type === '') {
-            return new ToolResult(false, 'Error: type is required for save action.');
-        }
-
         $content = (string) ($arguments['content'] ?? '');
         $summary = isset($arguments['summary']) ? trim((string) $arguments['summary']) : null;
         $order = isset($arguments['order']) ? (int) $arguments['order'] : 0;
 
-        try {
-            $this->validateType($type);
-        } catch (MemoryValidationException $e) {
-            return new ToolResult(false, "Error: {$e->getMessage()}");
+        $typeError = $this->validateTypeOrError($type);
+        if ($typeError !== null) {
+            return $typeError;
         }
 
         $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
@@ -177,7 +164,7 @@ abstract class AbstractMemoryTool extends AbstractTool
         }
 
         $summary ??= $this->deriveSummary($content);
-        $this->createMemory($scope, $agentId, $principalId, $name, $type, $summary, $content, $order);
+        $this->createMemory($scope, $agentId, $principalId, $name, $type, new CreateMemoryBody($summary, $content, $order));
 
         return new ToolResult(true, "Created memory [{$name}] (type={$type}) in {$scope} scope.");
     }
@@ -185,22 +172,20 @@ abstract class AbstractMemoryTool extends AbstractTool
     /**
      * @param array<string, mixed> $arguments
      */
-    private function describeReplace(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
+    private function runReplace(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
         $name = trim((string) ($arguments['name'] ?? ''));
-        if ($name === '') {
-            return new ToolResult(false, 'Error: name is required for replace action.');
-        }
-
         $type = (string) ($arguments['type'] ?? '');
-        if ($type === '') {
-            return new ToolResult(false, 'Error: type is required for replace action.');
-        }
-
         $find = (string) ($arguments['find'] ?? '');
         $newText = (string) ($arguments['new_text'] ?? '');
-        if ($find === '') {
-            return new ToolResult(false, 'Error: find is required for replace action.');
+
+        $missing = $this->firstMissingField([
+            'name'     => $name,
+            'type'     => $type,
+            'find'     => $find,
+        ], 'replace');
+        if ($missing !== null) {
+            return new ToolResult(false, "Error: {$missing} is required for replace action.");
         }
 
         $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
@@ -224,17 +209,15 @@ abstract class AbstractMemoryTool extends AbstractTool
     /**
      * @param array<string, mixed> $arguments
      */
-    private function describeDelete(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
+    private function runDelete(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
-        $name = trim((string) ($arguments['name'] ?? ''));
-        if ($name === '') {
-            return new ToolResult(false, 'Error: name is required for delete action.');
+        $validationError = $this->requireNameAndType($arguments, 'delete');
+        if ($validationError !== null) {
+            return $validationError;
         }
 
+        $name = trim((string) ($arguments['name'] ?? ''));
         $type = (string) ($arguments['type'] ?? '');
-        if ($type === '') {
-            return new ToolResult(false, 'Error: type is required for delete action.');
-        }
 
         $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
         if ($memory === null) {
@@ -243,6 +226,59 @@ abstract class AbstractMemoryTool extends AbstractTool
         $memory->delete();
 
         return new ToolResult(true, "Deleted memory [{$name}] (type={$type}) from {$scope} scope.");
+    }
+
+    /**
+     * @param array<string, mixed> $arguments
+     */
+    private function requireNameAndType(array $arguments, string $action): ?ToolResult
+    {
+        $name = trim((string) ($arguments['name'] ?? ''));
+        if ($name === '') {
+            return new ToolResult(false, "Error: name is required for {$action} action.");
+        }
+        $type = (string) ($arguments['type'] ?? '');
+        if ($type === '') {
+            return new ToolResult(false, "Error: type is required for {$action} action.");
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, string> $values
+     */
+    private function firstMissingField(array $values, string $action): ?string
+    {
+        foreach ($values as $field => $value) {
+            if ($value === '') {
+                return $field;
+            }
+        }
+
+        return null;
+    }
+
+    private function validateTypeOrError(string $type): ?ToolResult
+    {
+        try {
+            $this->validateType($type);
+        } catch (MemoryValidationException $e) {
+            return new ToolResult(false, "Error: {$e->getMessage()}");
+        }
+
+        return null;
+    }
+
+    private function renderMemoryBody(Memory $memory): string
+    {
+        $header = "# {$memory->name} ({$memory->type})";
+        if ($memory->summary !== null) {
+            $header .= "\n*Summary: {$memory->summary}*";
+        }
+        $header .= "\n\n";
+
+        return $header . ($memory->content ?? '');
     }
 
     private function updateMemoryFields(Memory $memory, string $content, ?string $summary, int $order): void
@@ -255,15 +291,7 @@ abstract class AbstractMemoryTool extends AbstractTool
         $memory->save();
     }
 
-    /**
-     * The 8-arg signature (scope, agentId, principalId, name, type, summary,
-     * content, order) is justified: every parameter is read in exactly one
-     * of the global/agent branches of the body's `if`, and threading a value
-     * object through both sides would only obscure the per-branch field
-     * assignments. Splitting would force callers to instantiate the VO for
-     * both branches even when only one path is reachable.
-     */
-    private function createMemory(string $scope, int $agentId, int $principalId, string $name, string $type, ?string $summary, string $content, int $order): void
+    private function createMemory(string $scope, int $agentId, int $principalId, string $name, string $type, CreateMemoryBody $body): void
     {
         $memory = new Memory();
         if ($scope === 'global') {
@@ -275,9 +303,9 @@ abstract class AbstractMemoryTool extends AbstractTool
         }
         $memory->type    = $type;
         $memory->name    = $name;
-        $memory->summary = $summary !== null ? Utf8Sanitizer::scrubString($summary) : null;
-        $memory->content = Utf8Sanitizer::scrubString($content);
-        $memory->order   = $order;
+        $memory->summary = $body->summary !== null ? Utf8Sanitizer::scrubString($body->summary) : null;
+        $memory->content = Utf8Sanitizer::scrubString($body->content);
+        $memory->order   = $body->order;
         $memory->save();
     }
 

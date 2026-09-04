@@ -7,6 +7,7 @@ namespace Spora\Plugins\Memories\Http;
 use JsonException;
 use Spora\Auth\AuthService;
 use Spora\Plugins\Memories\Exceptions\NotAuthenticatedException;
+use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
 use Spora\Plugins\Memories\Services\MemoryCommandInterface;
 use Spora\Plugins\Memories\Services\MemoryQueryInterface;
 use Spora\Plugins\Memories\Services\MemoryTypes;
@@ -15,6 +16,7 @@ use Spora\Services\PrincipalService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 /**
  * Shared surface for principal-scoped (global) and agent-scoped memory
@@ -122,5 +124,44 @@ abstract class AbstractMemoryController
             ['error' => ['code' => 'NOT_FOUND', 'message' => 'Memory not found.']],
             Response::HTTP_NOT_FOUND,
         );
+    }
+
+    /**
+     * Translate the result of a `replace*` service call into the right
+     * JSON response — distinguishes the "found and replaced" success from
+     * the "memory disappeared" not-found, and rethrows validation/agent
+     * lookup failures as typed responses instead of leaking generic
+     * RuntimeExceptions into the global error handler.
+     *
+     * @param array<string, mixed>|null $result
+     * @param Throwable|null $caughtException Exception caught while attempting the replace, if any.
+     */
+    protected function replaceResponse(?array $result, ?Throwable $caughtException = null): JsonResponse
+    {
+        if ($caughtException !== null) {
+            return $this->errorResponseForReplaceException($caughtException);
+        }
+        if ($result === null) {
+            return $this->error(
+                MemoryTypes::REPLACE_NOT_FOUND_CODE,
+                'Memory not found for replace.',
+                Response::HTTP_NOT_FOUND,
+            );
+        }
+
+        return new JsonResponse(['data' => $result]);
+    }
+
+    private function errorResponseForReplaceException(Throwable $e): JsonResponse
+    {
+        if ($e instanceof MemoryValidationException) {
+            return $this->error(
+                MemoryTypes::REPLACE_NOT_UNIQUE_CODE,
+                $e->getMessage(),
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+            );
+        }
+
+        return $this->notFound();
     }
 }

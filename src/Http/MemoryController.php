@@ -220,25 +220,11 @@ final class MemoryController extends AbstractMemoryController
     private function replaceMemoryOrError(string $memoryId, int $principalId, array $body): JsonResponse
     {
         try {
-            $result = $this->memoryCommand->replaceGlobalMemory($memoryId, $principalId, $body);
-        } catch (MemoryValidationException $e) {
-            return $this->error(
-                \Spora\Plugins\Memories\Services\MemoryTypes::REPLACE_NOT_UNIQUE_CODE,
-                $e->getMessage(),
-                Response::HTTP_UNPROCESSABLE_ENTITY,
+            return $this->replaceResponse(
+                $this->memoryCommand->replaceGlobalMemory($memoryId, $principalId, $body),
             );
-        } catch (AgentNotFoundException) {
-            return $this->notFound();
+        } catch (MemoryValidationException | AgentNotFoundException $e) {
+            return $this->replaceResponse(null, $e);
         }
-
-        if ($result === null) {
-            return $this->error(
-                \Spora\Plugins\Memories\Services\MemoryTypes::REPLACE_NOT_FOUND_CODE,
-                'Memory not found for replace.',
-                Response::HTTP_NOT_FOUND,
-            );
-        }
-
-        return new JsonResponse(['data' => $result]);
     }
 }
