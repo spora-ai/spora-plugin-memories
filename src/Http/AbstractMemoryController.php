@@ -11,6 +11,7 @@ use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
 use Spora\Plugins\Memories\Services\MemoryCommandInterface;
 use Spora\Plugins\Memories\Services\MemoryQueryInterface;
 use Spora\Plugins\Memories\Services\MemoryTypes;
+use Spora\Services\Exceptions\AgentNotFoundException;
 use Spora\Services\Exceptions\PrincipalMaterialisationException;
 use Spora\Services\PrincipalService;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -106,11 +107,88 @@ abstract class AbstractMemoryController
     }
 
     /**
-     * @return array|JsonResponse Empty array body or a 400 envelope.
+     * Shared validation for `POST .../memories`: name and type must be
+     * present and the type must be in the document-type enum.
+     *
+     * @param array<string, mixed> $body
      */
-    protected function decodeJson(Request $request): array|JsonResponse
+    protected function validateCreateInput(array $body): ?JsonResponse
     {
-        return $this->decodeRequestBody($request);
+        $name = trim((string) ($body['name'] ?? ''));
+        if ($name === '') {
+            return $this->error('VALIDATION_ERROR', 'name is required.', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        $type = $body['type'] ?? null;
+        if (!is_string($type) || $type === '') {
+            return $this->error('VALIDATION_ERROR', 'type is required.', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        return $this->validateType($type);
+    }
+
+    /**
+     * Shared validation for `POST .../replace`: name, type, and `find`
+     * are required; the type must be in the document-type enum.
+     *
+     * @param array<string, mixed> $body
+     */
+    protected function validateReplaceInput(array $body): ?JsonResponse
+    {
+        $name = trim((string) ($body['name'] ?? ''));
+        $type = (string) ($body['type'] ?? '');
+        $find = (string) ($body['find'] ?? '');
+
+        if ($name === '' || $type === '' || $find === '') {
+            return $this->error(
+                'VALIDATION_ERROR',
+                'name, type, and find are required.',
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+            );
+        }
+
+        return $this->validateType($type);
+    }
+
+    /**
+     * Wrap a `create*` service call: turn the success into a 201
+     * envelope, convert `MemoryValidationException` to a 422 error, and
+     * `AgentNotFoundException` (agent scope) to a 404. The agent-side
+     * exception is harmless when invoked from the global controller —
+     * the global path never throws it.
+     *
+     * @return JsonResponse 201 on success, 404 / 422 on the matching failure.
+     */
+    protected function runCreate(callable $operation): JsonResponse
+    {
+        try {
+            $result = $operation();
+            return new JsonResponse(['data' => $result], Response::HTTP_CREATED);
+        } catch (MemoryValidationException $e) {
+            return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (AgentNotFoundException) {
+            return $this->notFound();
+        }
+    }
+
+    /**
+     * Wrap an `update*` service call: 200 on success, 422 on validation
+     * failure, 404 when the memory disappeared.
+     *
+     * @return JsonResponse 200 with the updated memory on success, 404 / 422 otherwise.
+     */
+    protected function runUpdate(callable $operation): JsonResponse
+    {
+        try {
+            $result = $operation();
+        } catch (MemoryValidationException $e) {
+            return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        if ($result === null) {
+            return $this->notFound();
+        }
+
+        return new JsonResponse(['data' => $result]);
     }
 
     protected function error(string $code, string $message, int $status): JsonResponse

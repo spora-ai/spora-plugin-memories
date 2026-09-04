@@ -55,7 +55,7 @@ final class AgentMemoryController extends AbstractMemoryController
             return $validationError;
         }
 
-        return $this->createMemoryOrError($agentId, $principalId, $body);
+        return $this->runCreate(fn() => $this->memoryCommand->createAgentMemory($agentId, $principalId, $body));
     }
 
     /**
@@ -90,7 +90,7 @@ final class AgentMemoryController extends AbstractMemoryController
             return $body;
         }
 
-        return $this->updateMemoryOrError($memoryId, $agentId, $principalId, $body);
+        return $this->runUpdate(fn() => $this->memoryCommand->updateAgentMemory($memoryId, $agentId, $principalId, $body));
     }
 
     /**
@@ -112,7 +112,7 @@ final class AgentMemoryController extends AbstractMemoryController
             return $validationError;
         }
 
-        return $this->replaceMemoryOrError($memoryId, $agentId, $principalId, $body);
+        return $this->runReplace(fn() => $this->memoryCommand->replaceAgentMemory($memoryId, $agentId, $principalId, $body));
     }
 
     /**
@@ -151,104 +151,21 @@ final class AgentMemoryController extends AbstractMemoryController
             return $this->error('VALIDATION_ERROR', 'order must be an array of memory IDs.', Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        return $this->reorderMemoriesOrNotFound($agentId, $principalId, array_values($order));
-    }
-
-    /**
-     * @param array<string, mixed> $body
-     */
-    private function validateCreateInput(array $body): ?JsonResponse
-    {
-        $name = trim((string) ($body['name'] ?? ''));
-        if ($name === '') {
-            return $this->error('VALIDATION_ERROR', 'name is required.', Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-        $type = $body['type'] ?? null;
-        if (!is_string($type) || $type === '') {
-            return $this->error('VALIDATION_ERROR', 'type is required.', Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-
-        return $this->validateType($type);
-    }
-
-    /**
-     * @param array<string, mixed> $body
-     */
-    private function validateReplaceInput(array $body): ?JsonResponse
-    {
-        $name = trim((string) ($body['name'] ?? ''));
-        $type = (string) ($body['type'] ?? '');
-        $find = (string) ($body['find'] ?? '');
-
-        if ($name === '' || $type === '' || $find === '') {
-            return $this->error(
-                'VALIDATION_ERROR',
-                'name, type, and find are required.',
-                Response::HTTP_UNPROCESSABLE_ENTITY,
-            );
-        }
-
-        return $this->validateType($type);
-    }
-
-    /**
-     * @param array<string, mixed> $body
-     */
-    private function createMemoryOrError(int $agentId, int $principalId, array $body): JsonResponse
-    {
         try {
-            $result = $this->memoryCommand->createAgentMemory($agentId, $principalId, $body);
-            return new JsonResponse(['data' => $result], Response::HTTP_CREATED);
-        } catch (AgentNotFoundException) {
-            return $this->notFound();
-        } catch (MemoryValidationException $e) {
-            return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-    }
-
-    /**
-     * @param array<string, mixed> $body
-     */
-    private function updateMemoryOrError(string $memoryId, int $agentId, int $principalId, array $body): JsonResponse
-    {
-        try {
-            $result = $this->memoryCommand->updateAgentMemory($memoryId, $agentId, $principalId, $body);
-        } catch (MemoryValidationException $e) {
-            return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-
-        if ($result === null) {
-            return $this->notFound();
-        }
-
-        return new JsonResponse(['data' => $result]);
-    }
-
-    /**
-     * @param array<string, mixed> $body
-     */
-    private function replaceMemoryOrError(string $memoryId, int $agentId, int $principalId, array $body): JsonResponse
-    {
-        try {
-            return $this->replaceResponse(
-                $this->memoryCommand->replaceAgentMemory($memoryId, $agentId, $principalId, $body),
-            );
-        } catch (MemoryValidationException | AgentNotFoundException $e) {
-            return $this->replaceResponse(null, $e);
-        }
-    }
-
-    /**
-     * @param list<string> $order
-     */
-    private function reorderMemoriesOrNotFound(int $agentId, int $principalId, array $order): JsonResponse
-    {
-        try {
-            $this->memoryCommand->reorderAgentMemories($agentId, $principalId, $order);
+            $this->memoryCommand->reorderAgentMemories($agentId, $principalId, array_values($order));
         } catch (AgentNotFoundException) {
             return $this->notFound();
         }
 
         return new JsonResponse(['data' => ['success' => true]]);
+    }
+
+    private function runReplace(callable $operation): JsonResponse
+    {
+        try {
+            return $this->replaceResponse($operation());
+        } catch (MemoryValidationException | AgentNotFoundException $e) {
+            return $this->replaceResponse(null, $e);
+        }
     }
 }

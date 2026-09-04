@@ -157,6 +157,24 @@ abstract class AbstractMemoryTool extends AbstractTool
             return $typeError;
         }
 
+        return $this->saveOrCreate($name, $type, $content, $summary, $order, $scope, $agentId, $principalId);
+    }
+
+    /**
+     * Persist the (name, type) memory — update an existing row in place,
+     * or insert a new one. Returns the ToolResult describing which path
+     * was taken so the caller can render the matching success message.
+     */
+    private function saveOrCreate(
+        string $name,
+        string $type,
+        string $content,
+        ?string $summary,
+        int $order,
+        string $scope,
+        int $agentId,
+        int $principalId,
+    ): ToolResult {
         $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
         if ($memory !== null) {
             $this->updateMemoryFields($memory, $content, $summary, $order);
@@ -180,10 +198,10 @@ abstract class AbstractMemoryTool extends AbstractTool
         $newText = (string) ($arguments['new_text'] ?? '');
 
         $missing = $this->firstMissingField([
-            'name'     => $name,
-            'type'     => $type,
-            'find'     => $find,
-        ], 'replace');
+            'name' => $name,
+            'type' => $type,
+            'find' => $find,
+        ]);
         if ($missing !== null) {
             return new ToolResult(false, "Error: {$missing} is required for replace action.");
         }
@@ -193,6 +211,11 @@ abstract class AbstractMemoryTool extends AbstractTool
             return new ToolResult(false, "Memory [{$name}] (type={$type}) not found in {$scope} scope.");
         }
 
+        return $this->performReplace($memory, $find, $newText, $name, $type);
+    }
+
+    private function performReplace(Memory $memory, string $find, string $newText, string $name, string $type): ToolResult
+    {
         try {
             $memory->content = $this->replaceInMemoryContent((string) ($memory->content ?? ''), $find, $newText);
         } catch (MemoryValidationException $e) {
@@ -248,7 +271,7 @@ abstract class AbstractMemoryTool extends AbstractTool
     /**
      * @param array<string, string> $values
      */
-    private function firstMissingField(array $values, string $action): ?string
+    private function firstMissingField(array $values): ?string
     {
         foreach ($values as $field => $value) {
             if ($value === '') {

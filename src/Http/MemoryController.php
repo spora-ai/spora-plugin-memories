@@ -50,7 +50,7 @@ final class MemoryController extends AbstractMemoryController
             return $validationError;
         }
 
-        return $this->createMemoryOrError($principalId, $body);
+        return $this->runCreate(fn() => $this->memoryCommand->createGlobalMemory($principalId, $body));
     }
 
     /**
@@ -83,7 +83,7 @@ final class MemoryController extends AbstractMemoryController
             return $body;
         }
 
-        return $this->updateMemoryOrError($memoryId, $principalId, $body);
+        return $this->runUpdate(fn() => $this->memoryCommand->updateGlobalMemory($memoryId, $principalId, $body));
     }
 
     /**
@@ -104,7 +104,7 @@ final class MemoryController extends AbstractMemoryController
             return $validationError;
         }
 
-        return $this->replaceMemoryOrError($memoryId, $principalId, $body);
+        return $this->runReplace(fn() => $this->memoryCommand->replaceGlobalMemory($memoryId, $principalId, $body));
     }
 
     /**
@@ -146,83 +146,10 @@ final class MemoryController extends AbstractMemoryController
         return new JsonResponse(['data' => ['success' => true]]);
     }
 
-    /**
-     * @param array<string, mixed> $body
-     */
-    private function validateCreateInput(array $body): ?JsonResponse
-    {
-        $name = trim((string) ($body['name'] ?? ''));
-        if ($name === '') {
-            return $this->error('VALIDATION_ERROR', 'name is required.', Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-        $type = $body['type'] ?? null;
-        if (!is_string($type) || $type === '') {
-            return $this->error('VALIDATION_ERROR', 'type is required.', Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-
-        return $this->validateType($type);
-    }
-
-    /**
-     * @param array<string, mixed> $body
-     */
-    private function validateReplaceInput(array $body): ?JsonResponse
-    {
-        $name = trim((string) ($body['name'] ?? ''));
-        $type = (string) ($body['type'] ?? '');
-        $find = (string) ($body['find'] ?? '');
-
-        if ($name === '' || $type === '' || $find === '') {
-            return $this->error(
-                'VALIDATION_ERROR',
-                'name, type, and find are required.',
-                Response::HTTP_UNPROCESSABLE_ENTITY,
-            );
-        }
-
-        return $this->validateType($type);
-    }
-
-    /**
-     * @param array<string, mixed> $body
-     */
-    private function createMemoryOrError(int $principalId, array $body): JsonResponse
+    private function runReplace(callable $operation): JsonResponse
     {
         try {
-            $result = $this->memoryCommand->createGlobalMemory($principalId, $body);
-            return new JsonResponse(['data' => $result], Response::HTTP_CREATED);
-        } catch (MemoryValidationException $e) {
-            return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-    }
-
-    /**
-     * @param array<string, mixed> $body
-     */
-    private function updateMemoryOrError(string $memoryId, int $principalId, array $body): JsonResponse
-    {
-        try {
-            $result = $this->memoryCommand->updateGlobalMemory($memoryId, $principalId, $body);
-        } catch (MemoryValidationException $e) {
-            return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-
-        if ($result === null) {
-            return $this->notFound();
-        }
-
-        return new JsonResponse(['data' => $result]);
-    }
-
-    /**
-     * @param array<string, mixed> $body
-     */
-    private function replaceMemoryOrError(string $memoryId, int $principalId, array $body): JsonResponse
-    {
-        try {
-            return $this->replaceResponse(
-                $this->memoryCommand->replaceGlobalMemory($memoryId, $principalId, $body),
-            );
+            return $this->replaceResponse($operation());
         } catch (MemoryValidationException | AgentNotFoundException $e) {
             return $this->replaceResponse(null, $e);
         }
