@@ -102,18 +102,12 @@ abstract class AbstractMemoryTool extends AbstractTool
      */
     private function runGet(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
-        $validationError = $this->requireNameAndType($arguments, 'get');
-        if ($validationError !== null) {
-            return $validationError;
+        $lookup = $this->lookupMemoryByArgs($arguments, 'get', $scope, $agentId, $principalId);
+        if ($lookup instanceof ToolResult) {
+            return $lookup;
         }
 
-        $name = trim((string) ($arguments['name'] ?? ''));
-        $type = (string) ($arguments['type'] ?? '');
-
-        $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
-        if ($memory === null) {
-            return new ToolResult(false, "Memory [{$name}] (type={$type}) not found in {$scope} scope.");
-        }
+        $memory = $lookup['memory'];
 
         $header = "# {$memory->name} ({$memory->type})";
         if ($memory->summary !== null) {
@@ -203,18 +197,14 @@ abstract class AbstractMemoryTool extends AbstractTool
      */
     private function runDelete(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
-        $validationError = $this->requireNameAndType($arguments, 'delete');
-        if ($validationError !== null) {
-            return $validationError;
+        $lookup = $this->lookupMemoryByArgs($arguments, 'delete', $scope, $agentId, $principalId);
+        if ($lookup instanceof ToolResult) {
+            return $lookup;
         }
 
-        $name = trim((string) ($arguments['name'] ?? ''));
-        $type = (string) ($arguments['type'] ?? '');
-
-        $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
-        if ($memory === null) {
-            return new ToolResult(false, "Memory [{$name}] (type={$type}) not found in {$scope} scope.");
-        }
+        $memory = $lookup['memory'];
+        $name = $lookup['name'];
+        $type = $lookup['type'];
         $memory->delete();
 
         return new ToolResult(true, "Deleted memory [{$name}] (type={$type}) from {$scope} scope.");
@@ -235,6 +225,33 @@ abstract class AbstractMemoryTool extends AbstractTool
         }
 
         return null;
+    }
+
+    /**
+     * Common pre-amble for the get/delete operations: validate name+type,
+     * look up the memory row, and return either the resolved row (as a
+     * small associative array so callers can pull name/type back out for
+     * the success message) or a ready-to-return ToolResult describing
+     * the failure.
+     *
+     * @param array<string, mixed> $arguments
+     * @return ToolResult|array{name: string, type: string, memory: Memory}
+     */
+    private function lookupMemoryByArgs(array $arguments, string $action, string $scope, int $agentId, int $principalId): ToolResult|array
+    {
+        $validationError = $this->requireNameAndType($arguments, $action);
+        if ($validationError !== null) {
+            return $validationError;
+        }
+
+        $name = trim((string) ($arguments['name'] ?? ''));
+        $type = (string) ($arguments['type'] ?? '');
+        $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
+        if ($memory === null) {
+            return new ToolResult(false, "Memory [{$name}] (type={$type}) not found in {$scope} scope.");
+        }
+
+        return ['name' => $name, 'type' => $type, 'memory' => $memory];
     }
 
     private function updateMemoryFields(Memory $memory, string $content, ?string $summary, int $order): void

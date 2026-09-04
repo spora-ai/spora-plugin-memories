@@ -33,7 +33,7 @@ final class MemoryQueryService implements MemoryQueryInterface
         }
 
         return $query->get()
-            ->map(fn(Memory $m) => self::resource($m))
+            ->map(fn(Memory $m) => MemoryResource::toArray($m))
             ->all();
     }
 
@@ -50,7 +50,7 @@ final class MemoryQueryService implements MemoryQueryInterface
         }
 
         return $query->get()
-            ->map(fn(Memory $m) => self::resource($m))
+            ->map(fn(Memory $m) => MemoryResource::toArray($m))
             ->all();
     }
 
@@ -61,7 +61,7 @@ final class MemoryQueryService implements MemoryQueryInterface
             return null;
         }
 
-        return ['memory' => self::resource($memory)];
+        return ['memory' => MemoryResource::toArray($memory)];
     }
 
     public function getAgentMemory(string $memoryId, int $agentId, int $principalId): ?array
@@ -75,7 +75,7 @@ final class MemoryQueryService implements MemoryQueryInterface
             return null;
         }
 
-        return ['memory' => self::resource($memory)];
+        return ['memory' => MemoryResource::toArray($memory)];
     }
 
     /**
@@ -100,25 +100,5 @@ final class MemoryQueryService implements MemoryQueryInterface
     private function findAgent(int $id, int $principalId): ?Agent
     {
         return Agent::where('id', $id)->where('principal_id', $principalId)->first();
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function resource(Memory $memory): array
-    {
-        return [
-            'id'           => (string) $memory->id,
-            'principal_id' => $memory->principal_id !== null ? (int) $memory->principal_id : null,
-            'agent_id'     => $memory->agent_id !== null ? (int) $memory->agent_id : null,
-            'scope'        => (string) $memory->scope,
-            'type'         => (string) $memory->type,
-            'name'         => $memory->name,
-            'summary'      => $memory->summary,
-            'content'      => $memory->content,
-            'order'        => (int) $memory->order,
-            'created_at'   => $memory->created_at->toIso8601String(),
-            'updated_at'   => $memory->updated_at->toIso8601String(),
-        ];
     }
 }

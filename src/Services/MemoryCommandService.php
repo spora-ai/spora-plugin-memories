@@ -46,7 +46,7 @@ final class MemoryCommandService implements MemoryCommandInterface
         $memory->order        = $this->getNextOrder(null, $principalId);
         $this->insertWithTimestamps($memory, $now);
 
-        return ['memory' => self::resource($memory)];
+        return ['memory' => MemoryResource::toArray($memory)];
     }
 
     public function createAgentMemory(int $agentId, int $principalId, array $data): array
@@ -70,7 +70,7 @@ final class MemoryCommandService implements MemoryCommandInterface
         $memory->order     = $this->getNextOrder($agentId, $principalId);
         $this->insertWithTimestamps($memory, $now);
 
-        return ['memory' => self::resource($memory)];
+        return ['memory' => MemoryResource::toArray($memory)];
     }
 
     public function updateGlobalMemory(string $memoryId, int $principalId, array $data): ?array
@@ -99,7 +99,7 @@ final class MemoryCommandService implements MemoryCommandInterface
             $memory->refresh();
         }
 
-        return ['memory' => self::resource($memory)];
+        return ['memory' => MemoryResource::toArray($memory)];
     }
 
     public function updateAgentMemory(string $memoryId, int $agentId, int $principalId, array $data): ?array
@@ -132,7 +132,7 @@ final class MemoryCommandService implements MemoryCommandInterface
             $memory->refresh();
         }
 
-        return ['memory' => self::resource($memory)];
+        return ['memory' => MemoryResource::toArray($memory)];
     }
 
     public function replaceGlobalMemory(string $memoryId, int $principalId, array $data): ?array
@@ -148,7 +148,7 @@ final class MemoryCommandService implements MemoryCommandInterface
         $memory->save();
         $this->touchUpdatedAt((string) $memory->id);
 
-        return ['memory' => self::resource($memory->refresh())];
+        return ['memory' => MemoryResource::toArray($memory->refresh())];
     }
 
     public function replaceAgentMemory(string $memoryId, int $agentId, int $principalId, array $data): ?array
@@ -168,7 +168,7 @@ final class MemoryCommandService implements MemoryCommandInterface
         $memory->save();
         $this->touchUpdatedAt((string) $memory->id);
 
-        return ['memory' => self::resource($memory->refresh())];
+        return ['memory' => MemoryResource::toArray($memory->refresh())];
     }
 
     public function deleteGlobalMemory(string $memoryId, int $principalId): bool
@@ -368,23 +368,4 @@ final class MemoryCommandService implements MemoryCommandInterface
         return $data;
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private static function resource(Memory $memory): array
-    {
-        return [
-            'id'           => (string) $memory->id,
-            'principal_id' => $memory->principal_id !== null ? (int) $memory->principal_id : null,
-            'agent_id'     => $memory->agent_id !== null ? (int) $memory->agent_id : null,
-            'scope'        => (string) $memory->scope,
-            'type'         => (string) $memory->type,
-            'name'         => $memory->name,
-            'summary'      => $memory->summary,
-            'content'      => $memory->content,
-            'order'        => (int) $memory->order,
-            'created_at'   => $memory->created_at->toIso8601String(),
-            'updated_at'   => $memory->updated_at->toIso8601String(),
-        ];
-    }
 }
