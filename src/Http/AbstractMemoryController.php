@@ -191,6 +191,27 @@ abstract class AbstractMemoryController
         return new JsonResponse(['data' => $result]);
     }
 
+    /**
+     * Validate the `order` body field, then run the agent/global reorder
+     * service method via `$operation`. Returns 200 on success, 422 when
+     * `order` is not a list, 404 when the agent (or memory ownership
+     * check) is missing.
+     */
+    protected function runReorder(mixed $order, callable $operation): JsonResponse
+    {
+        if (!is_array($order) || ($order !== [] && !array_is_list($order))) {
+            return $this->error('VALIDATION_ERROR', 'order must be an array of memory IDs.', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        try {
+            $operation($order);
+        } catch (AgentNotFoundException) {
+            return $this->notFound();
+        }
+
+        return new JsonResponse(['data' => ['success' => true]]);
+    }
+
     protected function error(string $code, string $message, int $status): JsonResponse
     {
         return new JsonResponse(['error' => ['code' => $code, 'message' => $message]], $status);

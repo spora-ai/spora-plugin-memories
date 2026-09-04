@@ -8,7 +8,6 @@ use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
 use Spora\Services\Exceptions\AgentNotFoundException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Handles agent-scoped memory CRUD, reordering, and surgical substring
@@ -146,18 +145,10 @@ final class AgentMemoryController extends AbstractMemoryController
             return $body;
         }
 
-        $order = $body['order'] ?? [];
-        if (! is_array($order)) {
-            return $this->error('VALIDATION_ERROR', 'order must be an array of memory IDs.', Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-
-        try {
-            $this->memoryCommand->reorderAgentMemories($agentId, $principalId, array_values($order));
-        } catch (AgentNotFoundException) {
-            return $this->notFound();
-        }
-
-        return new JsonResponse(['data' => ['success' => true]]);
+        return $this->runReorder(
+            $body['order'] ?? [],
+            fn(array $order) => $this->memoryCommand->reorderAgentMemories($agentId, $principalId, $order),
+        );
     }
 
     private function runReplace(callable $operation): JsonResponse

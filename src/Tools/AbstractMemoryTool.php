@@ -47,29 +47,19 @@ abstract class AbstractMemoryTool extends AbstractTool
         ?PrincipalContext $context = null,
     ): ToolResult {
         $operation = $this->getOperationName($arguments);
-        $principalId = $this->resolvePrincipalId($context, $userId);
+        $scope = $this->getScope();
+        $principalId = $context !== null ? $context->principalId : ($userId ?? throw new MemoryValidationException(
+            'Cannot resolve principal id for memory tool execution: no PrincipalContext and no legacy userId fallback.',
+        ));
 
         return match ($operation) {
-            'list'    => $this->runList($this->getScope(), $agentId, $principalId, $arguments),
-            'get'     => $this->runGet($arguments, $this->getScope(), $agentId, $principalId),
-            'save'    => $this->runSave($arguments, $this->getScope(), $agentId, $principalId),
-            'replace' => $this->runReplace($arguments, $this->getScope(), $agentId, $principalId),
-            'delete'  => $this->runDelete($arguments, $this->getScope(), $agentId, $principalId),
+            'list'    => $this->list($scope, $agentId, $principalId, $arguments),
+            'get'     => $this->runGet($arguments, $scope, $agentId, $principalId),
+            'save'    => $this->runSave($arguments, $scope, $agentId, $principalId),
+            'replace' => $this->runReplace($arguments, $scope, $agentId, $principalId),
+            'delete'  => $this->runDelete($arguments, $scope, $agentId, $principalId),
             default   => new ToolResult(false, 'Invalid action. Must be list, get, save, replace, or delete.'),
         };
-    }
-
-    private function resolvePrincipalId(?PrincipalContext $context, ?int $userId): int
-    {
-        if ($context !== null) {
-            return $context->principalId;
-        }
-        if ($userId !== null) {
-            return $userId;
-        }
-        throw new MemoryValidationException(
-            'Cannot resolve principal id for memory tool execution: no PrincipalContext and no legacy userId fallback.',
-        );
     }
 
     public function describeAction(array $arguments): string
@@ -110,14 +100,6 @@ abstract class AbstractMemoryTool extends AbstractTool
     /**
      * @param array<string, mixed> $arguments
      */
-    private function runList(string $scope, int $agentId, int $principalId, array $arguments): ToolResult
-    {
-        return $this->list($scope, $agentId, $principalId, $arguments);
-    }
-
-    /**
-     * @param array<string, mixed> $arguments
-     */
     private function runGet(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
         $validationError = $this->requireNameAndType($arguments, 'get');
@@ -133,7 +115,13 @@ abstract class AbstractMemoryTool extends AbstractTool
             return new ToolResult(false, "Memory [{$name}] (type={$type}) not found in {$scope} scope.");
         }
 
-        return new ToolResult(true, $this->renderMemoryBody($memory));
+        $header = "# {$memory->name} ({$memory->type})";
+        if ($memory->summary !== null) {
+            $header .= "\n*Summary: {$memory->summary}*";
+        }
+        $header .= "\n\n";
+
+        return new ToolResult(true, $header . ($memory->content ?? ''));
     }
 
     /**
@@ -152,36 +140,20 @@ abstract class AbstractMemoryTool extends AbstractTool
         $summary = isset($arguments['summary']) ? trim((string) $arguments['summary']) : null;
         $order = isset($arguments['order']) ? (int) $arguments['order'] : 0;
 
-        $typeError = $this->validateTypeOrError($type);
-        if ($typeError !== null) {
-            return $typeError;
+        if (!in_array($type, MemoryTypes::DOCUMENT_TYPES, true)) {
+            return new ToolResult(
+                false,
+                sprintf("Error: type '%s' is not one of: %s", $type, implode(', ', MemoryTypes::DOCUMENT_TYPES)),
+            );
         }
 
-        return $this->saveOrCreate($name, $type, $content, $summary, $order, $scope, $agentId, $principalId);
-    }
-
-    /**
-     * Persist the (name, type) memory — update an existing row in place,
-     * or insert a new one. Returns the ToolResult describing which path
-     * was taken so the caller can render the matching success message.
-     */
-    private function saveOrCreate(
-        string $name,
-        string $type,
-        string $content,
-        ?string $summary,
-        int $order,
-        string $scope,
-        int $agentId,
-        int $principalId,
-    ): ToolResult {
         $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
         if ($memory !== null) {
             $this->updateMemoryFields($memory, $content, $summary, $order);
             return new ToolResult(true, "Updated memory [{$name}] (type={$type}) in {$scope} scope.");
         }
 
-        $summary ??= $this->deriveSummary($content);
+        $summary ??= $content !== '' ? mb_substr(strip_tags($content), 0, 200) : null;
         $this->createMemory($scope, $agentId, $principalId, $name, $type, new CreateMemoryBody($summary, $content, $order));
 
         return new ToolResult(true, "Created memory [{$name}] (type={$type}) in {$scope} scope.");
@@ -197,13 +169,10 @@ abstract class AbstractMemoryTool extends AbstractTool
         $find = (string) ($arguments['find'] ?? '');
         $newText = (string) ($arguments['new_text'] ?? '');
 
-        $missing = $this->firstMissingField([
-            'name' => $name,
-            'type' => $type,
-            'find' => $find,
-        ]);
-        if ($missing !== null) {
-            return new ToolResult(false, "Error: {$missing} is required for replace action.");
+        foreach (['name' => $name, 'type' => $type, 'find' => $find] as $field => $value) {
+            if ($value === '') {
+                return new ToolResult(false, "Error: {$field} is required for replace action.");
+            }
         }
 
         $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
@@ -211,11 +180,6 @@ abstract class AbstractMemoryTool extends AbstractTool
             return new ToolResult(false, "Memory [{$name}] (type={$type}) not found in {$scope} scope.");
         }
 
-        return $this->performReplace($memory, $find, $newText, $name, $type);
-    }
-
-    private function performReplace(Memory $memory, string $find, string $newText, string $name, string $type): ToolResult
-    {
         try {
             $memory->content = $this->replaceInMemoryContent((string) ($memory->content ?? ''), $find, $newText);
         } catch (MemoryValidationException $e) {
@@ -268,42 +232,6 @@ abstract class AbstractMemoryTool extends AbstractTool
         return null;
     }
 
-    /**
-     * @param array<string, string> $values
-     */
-    private function firstMissingField(array $values): ?string
-    {
-        foreach ($values as $field => $value) {
-            if ($value === '') {
-                return $field;
-            }
-        }
-
-        return null;
-    }
-
-    private function validateTypeOrError(string $type): ?ToolResult
-    {
-        try {
-            $this->validateType($type);
-        } catch (MemoryValidationException $e) {
-            return new ToolResult(false, "Error: {$e->getMessage()}");
-        }
-
-        return null;
-    }
-
-    private function renderMemoryBody(Memory $memory): string
-    {
-        $header = "# {$memory->name} ({$memory->type})";
-        if ($memory->summary !== null) {
-            $header .= "\n*Summary: {$memory->summary}*";
-        }
-        $header .= "\n\n";
-
-        return $header . ($memory->content ?? '');
-    }
-
     private function updateMemoryFields(Memory $memory, string $content, ?string $summary, int $order): void
     {
         $memory->content = Utf8Sanitizer::scrubString($content);
@@ -332,11 +260,6 @@ abstract class AbstractMemoryTool extends AbstractTool
         $memory->save();
     }
 
-    private function deriveSummary(string $content): ?string
-    {
-        return $content !== '' ? mb_substr(strip_tags($content), 0, 200) : null;
-    }
-
     private function findMemory(string $name, string $type, string $scope, int $agentId, int $principalId): ?Memory
     {
         if ($scope === 'global') {
@@ -360,17 +283,5 @@ abstract class AbstractMemoryTool extends AbstractTool
         }
 
         return Utf8Sanitizer::scrubString(str_replace($find, $newText, $current));
-    }
-
-    /**
-     * @throws MemoryValidationException
-     */
-    private function validateType(string $type): void
-    {
-        if ($type === '' || !in_array($type, MemoryTypes::DOCUMENT_TYPES, true)) {
-            throw new MemoryValidationException(
-                sprintf("type '%s' is not one of: %s", $type, implode(', ', MemoryTypes::DOCUMENT_TYPES)),
-            );
-        }
     }
 }
