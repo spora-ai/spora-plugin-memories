@@ -4,12 +4,8 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Memories\Http;
 
-use JsonException;
-use RuntimeException;
-use Spora\Auth\AuthService;
-use Spora\Plugins\Memories\Services\MemoryServiceInterface;
-use Spora\Services\Exceptions\PrincipalMaterialisationException;
-use Spora\Services\PrincipalService;
+use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
+use Spora\Services\Exceptions\AgentNotFoundException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -21,28 +17,18 @@ use Symfony\Component\HttpFoundation\Response;
  * is used only as an ownership-gate to make sure the caller can see the
  * agent before any service call lands.
  */
-final class AgentMemoryController
+final class AgentMemoryController extends AbstractMemoryController
 {
-    private const INVALID_JSON_MESSAGE = 'Request body must be valid JSON.';
-
-    private ?int $resolvedPrincipalId = null;
-
-    public function __construct(
-        private readonly AuthService $authService,
-        private readonly MemoryServiceInterface $memoryService,
-        private readonly PrincipalService $principals,
-    ) {}
-
     /**
      * GET /api/v1/agents/{agentId}/memories
      */
     public function index(Request $request): JsonResponse
     {
-        $principalId = $this->resolvePrincipalId();
+        $principalId = $this->requestPrincipalId();
         $agentId = (int) $request->attributes->get('agentId', 0);
         $type = $request->query->get('type');
 
-        $memories = $this->memoryService->listAgentMemories($agentId, $principalId, is_string($type) && $type !== '' ? $type : null);
+        $memories = $this->memoryQuery->listAgentMemories($agentId, $principalId, is_string($type) && $type !== '' ? $type : null);
 
         if ($memories === null) {
             return $this->notFound();
@@ -56,43 +42,20 @@ final class AgentMemoryController
      */
     public function store(Request $request): JsonResponse
     {
-        $principalId = $this->resolvePrincipalId();
+        $principalId = $this->requestPrincipalId();
         $agentId = (int) $request->attributes->get('agentId', 0);
 
-        try {
-            $body = $this->decodeJson($request);
-        } catch (JsonException) {
-            return $this->error('INVALID_JSON', self::INVALID_JSON_MESSAGE, Response::HTTP_BAD_REQUEST);
+        $body = $this->decodeRequestBody($request);
+        if ($body instanceof JsonResponse) {
+            return $body;
         }
 
-        $name = trim((string) ($body['name'] ?? ''));
-        $type = $body['type'] ?? null;
-
-        if ($name === '') {
-            return $this->error('VALIDATION_ERROR', 'name is required.', Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-        if (!is_string($type) || $type === '') {
-            return $this->error('VALIDATION_ERROR', 'type is required.', Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-        if (!in_array($type, \Spora\Plugins\Memories\Services\MemoryService::DOCUMENT_TYPES, true)) {
-            return $this->error(
-                \Spora\Plugins\Memories\Services\MemoryService::TYPE_NOT_ALLOWED_CODE,
-                sprintf("type '%s' is not one of: %s", $type, implode(', ', \Spora\Plugins\Memories\Services\MemoryService::DOCUMENT_TYPES)),
-                Response::HTTP_UNPROCESSABLE_ENTITY,
-            );
+        $validationError = $this->validateCreateInput($body);
+        if ($validationError !== null) {
+            return $validationError;
         }
 
-        return $this->createMemoryOrNotFound($agentId, $principalId, $body);
-    }
-
-    private function createMemoryOrNotFound(int $agentId, int $principalId, array $body): JsonResponse
-    {
-        try {
-            $result = $this->memoryService->createAgentMemory($agentId, $principalId, $body);
-            return new JsonResponse(['data' => $result], Response::HTTP_CREATED);
-        } catch (RuntimeException) {
-            return $this->notFound();
-        }
+        return $this->createMemoryOrError($agentId, $principalId, $body);
     }
 
     /**
@@ -100,11 +63,11 @@ final class AgentMemoryController
      */
     public function show(Request $request): JsonResponse
     {
-        $principalId = $this->resolvePrincipalId();
+        $principalId = $this->requestPrincipalId();
         $agentId = (int) $request->attributes->get('agentId', 0);
         $memoryId = (string) $request->attributes->get('memoryId', '');
 
-        $result = $this->memoryService->getAgentMemory($memoryId, $agentId, $principalId);
+        $result = $this->memoryQuery->getAgentMemory($memoryId, $agentId, $principalId);
 
         if ($result === null) {
             return $this->notFound();
@@ -118,27 +81,16 @@ final class AgentMemoryController
      */
     public function update(Request $request): JsonResponse
     {
-        $principalId = $this->resolvePrincipalId();
+        $principalId = $this->requestPrincipalId();
         $agentId = (int) $request->attributes->get('agentId', 0);
         $memoryId = (string) $request->attributes->get('memoryId', '');
 
-        try {
-            $body = $this->decodeJson($request);
-        } catch (JsonException) {
-            return $this->error('INVALID_JSON', self::INVALID_JSON_MESSAGE, Response::HTTP_BAD_REQUEST);
+        $body = $this->decodeRequestBody($request);
+        if ($body instanceof JsonResponse) {
+            return $body;
         }
 
-        try {
-            $result = $this->memoryService->updateAgentMemory($memoryId, $agentId, $principalId, $body);
-        } catch (RuntimeException $e) {
-            return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-
-        if ($result === null) {
-            return $this->notFound();
-        }
-
-        return new JsonResponse(['data' => $result]);
+        return $this->updateMemoryOrError($memoryId, $agentId, $principalId, $body);
     }
 
     /**
@@ -146,55 +98,21 @@ final class AgentMemoryController
      */
     public function replace(Request $request): JsonResponse
     {
-        $principalId = $this->resolvePrincipalId();
+        $principalId = $this->requestPrincipalId();
         $agentId = (int) $request->attributes->get('agentId', 0);
         $memoryId = (string) $request->attributes->get('memoryId', '');
 
-        try {
-            $body = $this->decodeJson($request);
-        } catch (JsonException) {
-            return $this->error('INVALID_JSON', self::INVALID_JSON_MESSAGE, Response::HTTP_BAD_REQUEST);
+        $body = $this->decodeRequestBody($request);
+        if ($body instanceof JsonResponse) {
+            return $body;
         }
 
-        $name = trim((string) ($body['name'] ?? ''));
-        $type = (string) ($body['type'] ?? '');
-        $typeValid = in_array($type, \Spora\Plugins\Memories\Services\MemoryService::DOCUMENT_TYPES, true);
-        $find = (string) ($body['find'] ?? '');
-
-        if ($name === '' || $type === '' || $find === '') {
-            return $this->error(
-                'VALIDATION_ERROR',
-                'name, type, and find are required.',
-                Response::HTTP_UNPROCESSABLE_ENTITY,
-            );
-        }
-        if (!$typeValid) {
-            return $this->error(
-                \Spora\Plugins\Memories\Services\MemoryService::TYPE_NOT_ALLOWED_CODE,
-                sprintf("type '%s' is not one of: %s", $type, implode(', ', \Spora\Plugins\Memories\Services\MemoryService::DOCUMENT_TYPES)),
-                Response::HTTP_UNPROCESSABLE_ENTITY,
-            );
+        $validationError = $this->validateReplaceInput($body);
+        if ($validationError !== null) {
+            return $validationError;
         }
 
-        try {
-            $result = $this->memoryService->replaceAgentMemory($memoryId, $agentId, $principalId, $body);
-        } catch (RuntimeException $e) {
-            return $this->error(
-                \Spora\Plugins\Memories\Services\MemoryService::REPLACE_NOT_UNIQUE_CODE,
-                $e->getMessage(),
-                Response::HTTP_UNPROCESSABLE_ENTITY,
-            );
-        }
-
-        if ($result === null) {
-            return $this->error(
-                \Spora\Plugins\Memories\Services\MemoryService::REPLACE_NOT_FOUND_CODE,
-                'Memory not found for replace.',
-                Response::HTTP_NOT_FOUND,
-            );
-        }
-
-        return new JsonResponse(['data' => $result]);
+        return $this->replaceMemoryOrError($memoryId, $agentId, $principalId, $body);
     }
 
     /**
@@ -202,11 +120,11 @@ final class AgentMemoryController
      */
     public function destroy(Request $request): JsonResponse
     {
-        $principalId = $this->resolvePrincipalId();
+        $principalId = $this->requestPrincipalId();
         $agentId = (int) $request->attributes->get('agentId', 0);
         $memoryId = (string) $request->attributes->get('memoryId', '');
 
-        $deleted = $this->memoryService->deleteAgentMemory($memoryId, $agentId, $principalId);
+        $deleted = $this->memoryCommand->deleteAgentMemory($memoryId, $agentId, $principalId);
 
         if (! $deleted) {
             return $this->notFound();
@@ -220,13 +138,12 @@ final class AgentMemoryController
      */
     public function reorder(Request $request): JsonResponse
     {
-        $principalId = $this->resolvePrincipalId();
+        $principalId = $this->requestPrincipalId();
         $agentId = (int) $request->attributes->get('agentId', 0);
 
-        try {
-            $body = $this->decodeJson($request);
-        } catch (JsonException) {
-            return $this->error('INVALID_JSON', self::INVALID_JSON_MESSAGE, Response::HTTP_BAD_REQUEST);
+        $body = $this->decodeRequestBody($request);
+        if ($body instanceof JsonResponse) {
+            return $body;
         }
 
         $order = $body['order'] ?? [];
@@ -237,55 +154,115 @@ final class AgentMemoryController
         return $this->reorderMemoriesOrNotFound($agentId, $principalId, array_values($order));
     }
 
+    /**
+     * @param array<string, mixed> $body
+     */
+    private function validateCreateInput(array $body): ?JsonResponse
+    {
+        $name = trim((string) ($body['name'] ?? ''));
+        if ($name === '') {
+            return $this->error('VALIDATION_ERROR', 'name is required.', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        $type = $body['type'] ?? null;
+        if (!is_string($type) || $type === '') {
+            return $this->error('VALIDATION_ERROR', 'type is required.', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        return $this->validateType($type);
+    }
+
+    /**
+     * @param array<string, mixed> $body
+     */
+    private function validateReplaceInput(array $body): ?JsonResponse
+    {
+        $name = trim((string) ($body['name'] ?? ''));
+        $type = (string) ($body['type'] ?? '');
+        $find = (string) ($body['find'] ?? '');
+
+        if ($name === '' || $type === '' || $find === '') {
+            return $this->error(
+                'VALIDATION_ERROR',
+                'name, type, and find are required.',
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+            );
+        }
+
+        return $this->validateType($type);
+    }
+
+    /**
+     * @param array<string, mixed> $body
+     */
+    private function createMemoryOrError(int $agentId, int $principalId, array $body): JsonResponse
+    {
+        try {
+            $result = $this->memoryCommand->createAgentMemory($agentId, $principalId, $body);
+            return new JsonResponse(['data' => $result], Response::HTTP_CREATED);
+        } catch (AgentNotFoundException) {
+            return $this->notFound();
+        } catch (MemoryValidationException $e) {
+            return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $body
+     */
+    private function updateMemoryOrError(string $memoryId, int $agentId, int $principalId, array $body): JsonResponse
+    {
+        try {
+            $result = $this->memoryCommand->updateAgentMemory($memoryId, $agentId, $principalId, $body);
+        } catch (MemoryValidationException $e) {
+            return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        if ($result === null) {
+            return $this->notFound();
+        }
+
+        return new JsonResponse(['data' => $result]);
+    }
+
+    /**
+     * @param array<string, mixed> $body
+     */
+    private function replaceMemoryOrError(string $memoryId, int $agentId, int $principalId, array $body): JsonResponse
+    {
+        try {
+            $result = $this->memoryCommand->replaceAgentMemory($memoryId, $agentId, $principalId, $body);
+        } catch (MemoryValidationException $e) {
+            return $this->error(
+                \Spora\Plugins\Memories\Services\MemoryTypes::REPLACE_NOT_UNIQUE_CODE,
+                $e->getMessage(),
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+            );
+        } catch (AgentNotFoundException) {
+            return $this->notFound();
+        }
+
+        if ($result === null) {
+            return $this->error(
+                \Spora\Plugins\Memories\Services\MemoryTypes::REPLACE_NOT_FOUND_CODE,
+                'Memory not found for replace.',
+                Response::HTTP_NOT_FOUND,
+            );
+        }
+
+        return new JsonResponse(['data' => $result]);
+    }
+
+    /**
+     * @param list<string> $order
+     */
     private function reorderMemoriesOrNotFound(int $agentId, int $principalId, array $order): JsonResponse
     {
         try {
-            $this->memoryService->reorderAgentMemories($agentId, $principalId, $order);
-        } catch (RuntimeException) {
+            $this->memoryCommand->reorderAgentMemories($agentId, $principalId, $order);
+        } catch (AgentNotFoundException) {
             return $this->notFound();
         }
 
         return new JsonResponse(['data' => ['success' => true]]);
-    }
-
-    private function resolvePrincipalId(): int
-    {
-        if ($this->resolvedPrincipalId !== null) {
-            return $this->resolvedPrincipalId;
-        }
-        $userId = $this->authService->currentUserId();
-        if ($userId === null) {
-            throw new RuntimeException('Authenticated user required');
-        }
-        try {
-            $this->resolvedPrincipalId = (int) $this->principals->ensureUserPrincipal($userId)->id;
-        } catch (PrincipalMaterialisationException $e) {
-            throw new RuntimeException($e->getMessage(), 0, $e);
-        }
-
-        return $this->resolvedPrincipalId;
-    }
-
-    private function decodeJson(Request $request): array
-    {
-        $content = $request->getContent();
-        if ($content === '') {
-            return [];
-        }
-
-        return json_decode($content, true, 512, JSON_THROW_ON_ERROR);
-    }
-
-    private function error(string $code, string $message, int $status): JsonResponse
-    {
-        return new JsonResponse(['error' => ['code' => $code, 'message' => $message]], $status);
-    }
-
-    private function notFound(): JsonResponse
-    {
-        return new JsonResponse(
-            ['error' => ['code' => 'NOT_FOUND', 'message' => 'Memory not found.']],
-            Response::HTTP_NOT_FOUND,
-        );
     }
 }
