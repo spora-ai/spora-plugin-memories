@@ -6,6 +6,8 @@ namespace Spora\Plugins\Memories\Tests\Unit\Http;
 
 use Spora\Auth\AuthService;
 use Spora\Plugins\Memories\Http\AgentMemoryController;
+use Spora\Plugins\Memories\Services\MemoryCommandService;
+use Spora\Plugins\Memories\Services\MemoryQueryService;
 use Spora\Plugins\Memories\Services\MemoryService;
 use Spora\Services\PrincipalService;
 use Symfony\Component\HttpFoundation\Request;
@@ -19,11 +21,12 @@ const AGENT_MEM_TEST_404_UNKNOWN_MEMORY = 'returns 404 for unknown memory';
 function makeAgentMemController(?AuthService $authService = null): array
 {
     $authService = $authService ?? bootAuthLayer();
-    $memoryService = new MemoryService();
+    $memoryQuery = new MemoryQueryService();
+    $memoryCommand = new MemoryCommandService();
     $principals = new PrincipalService(new \Spora\Services\PrincipalResolver());
-    $controller = new AgentMemoryController($authService, $memoryService, $principals);
+    $controller = new AgentMemoryController($authService, $memoryQuery, $memoryCommand, $principals);
 
-    return [$controller, $authService, $memoryService, $principals];
+    return [$controller, $authService, $memoryQuery, $memoryCommand, $principals];
 }
 
 function createAgentMemUser(AuthService $authService, string $email): array
@@ -42,7 +45,7 @@ function createAgentMemUser(AuthService $authService, string $email): array
 
 describe('AgentMemoryController::index', function (): void {
     test('returns 200 with memories for an existing agent', function (): void {
-        [$controller, $authService, $service] = makeAgentMemController();
+        [$controller, $authService, , $service] = makeAgentMemController();
         [, $agentId, $principalId] = createAgentMemUser($authService, 'index@example.com');
         $service->createAgentMemory($agentId, $principalId, ['name' => 'M1', 'type' => 'context', 'content' => 'x']);
 
@@ -67,7 +70,7 @@ describe('AgentMemoryController::index', function (): void {
     });
 
     test('forwards the ?type filter to the service', function (): void {
-        [$controller, $authService, $service] = makeAgentMemController();
+        [$controller, $authService, , $service] = makeAgentMemController();
         [, $agentId, $principalId] = createAgentMemUser($authService, 'indextype@example.com');
         $service->createAgentMemory($agentId, $principalId, ['name' => 'plan_one', 'type' => 'plan', 'content' => 'p']);
         $service->createAgentMemory($agentId, $principalId, ['name' => 'ctx_one', 'type' => 'context', 'content' => 'c']);
@@ -154,7 +157,7 @@ describe('AgentMemoryController::store', function (): void {
 
 describe('AgentMemoryController::show', function (): void {
     test('returns 200 with the memory', function (): void {
-        [$controller, $authService, $service] = makeAgentMemController();
+        [$controller, $authService, , $service] = makeAgentMemController();
         [, $agentId, $principalId] = createAgentMemUser($authService, 'show@example.com');
         $created = $service->createAgentMemory($agentId, $principalId, ['name' => 'M', 'type' => 'context', 'content' => 'c']);
 
@@ -180,7 +183,7 @@ describe('AgentMemoryController::show', function (): void {
 
 describe('AgentMemoryController::update', function (): void {
     test('returns 200 with the updated memory', function (): void {
-        [$controller, $authService, $service] = makeAgentMemController();
+        [$controller, $authService, , $service] = makeAgentMemController();
         [, $agentId, $principalId] = createAgentMemUser($authService, 'update@example.com');
         $created = $service->createAgentMemory($agentId, $principalId, ['name' => 'Old', 'type' => 'context', 'content' => 'c']);
 
@@ -221,7 +224,7 @@ describe('AgentMemoryController::update', function (): void {
 
 describe('AgentMemoryController::replace', function (): void {
     test('returns 200 on a unique-substring replace', function (): void {
-        [$controller, $authService, $service] = makeAgentMemController();
+        [$controller, $authService, , $service] = makeAgentMemController();
         [, $agentId, $principalId] = createAgentMemUser($authService, 'replace@example.com');
         $created = $service->createAgentMemory($agentId, $principalId, ['name' => 'sprint', 'type' => 'plan', 'content' => 'TODO: ship auth, write tests']);
 
@@ -239,7 +242,7 @@ describe('AgentMemoryController::replace', function (): void {
     });
 
     test('returns 422 REPLACE_NOT_UNIQUE on multiple matches', function (): void {
-        [$controller, $authService, $service] = makeAgentMemController();
+        [$controller, $authService, , $service] = makeAgentMemController();
         [, $agentId, $principalId] = createAgentMemUser($authService, 'replaceamb@example.com');
         $created = $service->createAgentMemory($agentId, $principalId, ['name' => 'sprint', 'type' => 'plan', 'content' => 'foo foo foo']);
 
@@ -291,7 +294,7 @@ describe('AgentMemoryController::replace', function (): void {
 
 describe('AgentMemoryController::destroy', function (): void {
     test('returns 200 with deleted: true on success', function (): void {
-        [$controller, $authService, $service] = makeAgentMemController();
+        [$controller, $authService, , $service] = makeAgentMemController();
         [, $agentId, $principalId] = createAgentMemUser($authService, 'destroy@example.com');
         $created = $service->createAgentMemory($agentId, $principalId, ['name' => 'X', 'type' => 'context', 'content' => 'c']);
 
@@ -320,7 +323,7 @@ describe('AgentMemoryController::destroy', function (): void {
 
 describe('AgentMemoryController::reorder', function (): void {
     test('returns 200 with success: true on valid order', function (): void {
-        [$controller, $authService, $service] = makeAgentMemController();
+        [$controller, $authService, , $service] = makeAgentMemController();
         [, $agentId, $principalId] = createAgentMemUser($authService, 'reorder@example.com');
         $a = $service->createAgentMemory($agentId, $principalId, ['name' => 'A', 'type' => 'context', 'content' => 'a']);
         $b = $service->createAgentMemory($agentId, $principalId, ['name' => 'B', 'type' => 'context', 'content' => 'b']);

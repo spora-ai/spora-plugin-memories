@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Spora\Auth\AuthService;
 use Spora\Plugins\Memories\Http\AgentMemoryController;
 use Spora\Plugins\Memories\Models\Memory;
+use Spora\Plugins\Memories\Services\MemoryCommandService;
+use Spora\Plugins\Memories\Services\MemoryQueryService;
 use Spora\Plugins\Memories\Services\MemoryService;
 use Spora\Services\PrincipalService;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,11 +16,12 @@ const AGENT_MEMORY_REORDER_PATH = '/api/v1/agents/1/memories/reorder';
 function makeAgentMemoryController(?AuthService $authService = null): array
 {
     $authService = $authService ?? bootAuthLayer();
-    $memoryService = new MemoryService();
+    $memoryQuery = new MemoryQueryService();
+    $memoryCommand = new MemoryCommandService();
     $principals = new PrincipalService(new Spora\Services\PrincipalResolver());
-    $controller = new AgentMemoryController($authService, $memoryService, $principals);
+    $controller = new AgentMemoryController($authService, $memoryQuery, $memoryCommand, $principals);
 
-    return [$controller, $authService, $memoryService];
+    return [$controller, $authService, $memoryQuery, $memoryCommand];
 }
 
 function createMemoryTestUserWithAgents(AuthService $authService, string $email = 'agentcontroller@example.com'): array

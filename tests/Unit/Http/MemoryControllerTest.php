@@ -6,6 +6,8 @@ namespace Spora\Plugins\Memories\Tests\Unit\Http;
 
 use Spora\Auth\AuthService;
 use Spora\Plugins\Memories\Http\MemoryController;
+use Spora\Plugins\Memories\Services\MemoryCommandService;
+use Spora\Plugins\Memories\Services\MemoryQueryService;
 use Spora\Plugins\Memories\Services\MemoryService;
 use Spora\Services\PrincipalService;
 use Symfony\Component\HttpFoundation\Request;
@@ -21,11 +23,12 @@ const MEM_TEST_404_UNKNOWN_ID   = 'returns 404 for unknown id';
 function makeMemController(?AuthService $authService = null): array
 {
     $authService = $authService ?? bootAuthLayer();
-    $memoryService = new MemoryService();
+    $memoryQuery = new MemoryQueryService();
+    $memoryCommand = new MemoryCommandService();
     $principals = new PrincipalService(new \Spora\Services\PrincipalResolver());
-    $controller = new MemoryController($authService, $memoryService, $principals);
+    $controller = new MemoryController($authService, $memoryQuery, $memoryCommand, $principals);
 
-    return [$controller, $authService, $memoryService, $principals];
+    return [$controller, $authService, $memoryQuery, $memoryCommand, $principals];
 }
 
 function createMemUser(AuthService $authService, string $email): int
@@ -41,12 +44,11 @@ function createMemUser(AuthService $authService, string $email): int
 
 describe('MemoryController::index', function (): void {
     test('returns list of global memories for the principal', function (): void {
-        [$controller, $authService] = makeMemController();
+        [$controller, $authService, , $memoryCommand] = makeMemController();
         $userId = createMemUser($authService, 'index@example.com');
         $principalId = createUserPrincipal($userId);
-        $memoryService = new MemoryService();
-        $memoryService->createGlobalMemory($principalId, ['name' => 'Mem 1', 'type' => 'context', 'content' => 'x']);
-        $memoryService->createGlobalMemory($principalId, ['name' => 'Mem 2', 'type' => 'context', 'content' => 'y']);
+        $memoryCommand->createGlobalMemory($principalId, ['name' => 'Mem 1', 'type' => 'context', 'content' => 'x']);
+        $memoryCommand->createGlobalMemory($principalId, ['name' => 'Mem 2', 'type' => 'context', 'content' => 'y']);
 
         $response = $controller->index(new Request());
 
@@ -67,12 +69,11 @@ describe('MemoryController::index', function (): void {
     });
 
     test('forwards the ?type filter to the service', function (): void {
-        [$controller, $authService] = makeMemController();
+        [$controller, $authService, , $memoryCommand] = makeMemController();
         $userId = createMemUser($authService, 'typefilter@example.com');
         $principalId = createUserPrincipal($userId);
-        $memoryService = new MemoryService();
-        $memoryService->createGlobalMemory($principalId, ['name' => 'plan_one', 'type' => 'plan', 'content' => 'p']);
-        $memoryService->createGlobalMemory($principalId, ['name' => 'ctx_one', 'type' => 'context', 'content' => 'c']);
+        $memoryCommand->createGlobalMemory($principalId, ['name' => 'plan_one', 'type' => 'plan', 'content' => 'p']);
+        $memoryCommand->createGlobalMemory($principalId, ['name' => 'ctx_one', 'type' => 'context', 'content' => 'c']);
 
         $request = Request::create(MEM_API, 'GET', ['type' => 'plan']);
         $response = $controller->index($request);
@@ -154,7 +155,7 @@ describe('MemoryController::store', function (): void {
 
 describe('MemoryController::show', function (): void {
     test('returns 200 with the memory', function (): void {
-        [$controller, $authService, $service] = makeMemController();
+        [$controller, $authService, , $service] = makeMemController();
         $userId = createMemUser($authService, 'show@example.com');
         $principalId = createUserPrincipal($userId);
         $created = $service->createGlobalMemory($principalId, ['name' => 'Show Me', 'type' => 'context', 'content' => 'c']);
@@ -181,7 +182,7 @@ describe('MemoryController::show', function (): void {
 
 describe('MemoryController::update', function (): void {
     test('returns 200 with the updated memory on success', function (): void {
-        [$controller, $authService, $service] = makeMemController();
+        [$controller, $authService, , $service] = makeMemController();
         $userId = createMemUser($authService, 'update@example.com');
         $principalId = createUserPrincipal($userId);
         $created = $service->createGlobalMemory($principalId, ['name' => 'Old', 'type' => 'context', 'content' => 'c']);
@@ -207,7 +208,7 @@ describe('MemoryController::update', function (): void {
     });
 
     test(MEM_TEST_400_INVALID_JSON, function (): void {
-        [$controller, $authService, $service] = makeMemController();
+        [$controller, $authService, , $service] = makeMemController();
         $userId = createMemUser($authService, 'updatebad@example.com');
         $principalId = createUserPrincipal($userId);
         $created = $service->createGlobalMemory($principalId, ['name' => 'Test', 'type' => 'context', 'content' => 'c']);
@@ -222,7 +223,7 @@ describe('MemoryController::update', function (): void {
 
 describe('MemoryController::replace', function (): void {
     test('returns 200 on a unique-substring replace', function (): void {
-        [$controller, $authService, $service] = makeMemController();
+        [$controller, $authService, , $service] = makeMemController();
         $userId = createMemUser($authService, 'replace@example.com');
         $principalId = createUserPrincipal($userId);
         $created = $service->createGlobalMemory($principalId, ['name' => 'roadmap', 'type' => 'documentation', 'content' => 'phase 1: alpha\nphase 2: beta']);
@@ -240,7 +241,7 @@ describe('MemoryController::replace', function (): void {
     });
 
     test('returns 422 REPLACE_NOT_UNIQUE when find matches > 1 occurrence', function (): void {
-        [$controller, $authService, $service] = makeMemController();
+        [$controller, $authService, , $service] = makeMemController();
         $userId = createMemUser($authService, 'replaceamb@example.com');
         $principalId = createUserPrincipal($userId);
         $created = $service->createGlobalMemory($principalId, ['name' => 'roadmap', 'type' => 'documentation', 'content' => 'phase 1: beta\nphase 2: beta']);
@@ -292,7 +293,7 @@ describe('MemoryController::replace', function (): void {
 
 describe('MemoryController::destroy', function (): void {
     test('returns 200 with deleted: true on success', function (): void {
-        [$controller, $authService, $service] = makeMemController();
+        [$controller, $authService, , $service] = makeMemController();
         $userId = createMemUser($authService, 'destroy@example.com');
         $principalId = createUserPrincipal($userId);
         $created = $service->createGlobalMemory($principalId, ['name' => 'Delete Me', 'type' => 'context', 'content' => 'c']);
@@ -320,7 +321,7 @@ describe('MemoryController::destroy', function (): void {
 
 describe('MemoryController::reorder', function (): void {
     test('returns 200 with success: true on valid order', function (): void {
-        [$controller, $authService, $service] = makeMemController();
+        [$controller, $authService, , $service] = makeMemController();
         $userId = createMemUser($authService, 'reorder@example.com');
         $principalId = createUserPrincipal($userId);
         $a = $service->createGlobalMemory($principalId, ['name' => 'A', 'type' => 'context', 'content' => 'a']);
@@ -368,7 +369,7 @@ describe('MemoryController::reorder', function (): void {
 
 describe('Cross-principal isolation', function (): void {
     test('user cannot update another users global memory', function (): void {
-        [$controller, $authService, $service] = makeMemController();
+        [$controller, $authService, , $service] = makeMemController();
         $ownerId = createMemUser($authService, 'owner@iso.com');
         $ownerPrincipalId = createUserPrincipal($ownerId);
         $created = $service->createGlobalMemory($ownerPrincipalId, ['name' => 'Private', 'type' => 'context', 'content' => 'secret']);

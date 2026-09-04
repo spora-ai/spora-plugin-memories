@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Spora\Auth\AuthService;
 use Spora\Plugins\Memories\Http\MemoryController;
 use Spora\Plugins\Memories\Models\Memory;
+use Spora\Plugins\Memories\Services\MemoryCommandService;
+use Spora\Plugins\Memories\Services\MemoryQueryService;
 use Spora\Plugins\Memories\Services\MemoryService;
 use Spora\Services\PrincipalService;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,11 +17,12 @@ const MEMORIES_ENDPOINT = '/api/v1/memories';
 function makeMemoryController(?AuthService $authService = null): array
 {
     $authService = $authService ?? bootAuthLayer();
-    $memoryService = new MemoryService();
+    $memoryQuery = new MemoryQueryService();
+    $memoryCommand = new MemoryCommandService();
     $principals = new PrincipalService(new Spora\Services\PrincipalResolver());
-    $controller = new MemoryController($authService, $memoryService, $principals);
+    $controller = new MemoryController($authService, $memoryQuery, $memoryCommand, $principals);
 
-    return [$controller, $authService, $memoryService];
+    return [$controller, $authService, $memoryQuery, $memoryCommand];
 }
 
 function createMemoryTestUser(AuthService $authService, string $email = 'controller@example.com'): array

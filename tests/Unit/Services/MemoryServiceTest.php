@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 use Spora\Plugins\Memories\Models\Memory;
 use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
-use Spora\Plugins\Memories\Services\MemoryService;
+use Spora\Plugins\Memories\Services\MemoryCommandService;
+use Spora\Plugins\Memories\Services\MemoryQueryService;
 
 const AGENT1_EMAIL = 'agent1@test.com';
 const AGENT2_NAME = 'Agent 2';
@@ -16,9 +17,20 @@ const IT_MEMORY_NOT_FOUND = 'returns null when memory does not exist';
 const MEM_DEFAULT_TYPE = 'context';
 
 
-function makeMemoryService(): MemoryService
+/**
+ * @return MemoryCommandService
+ */
+function makeMemoryService(): MemoryCommandService
 {
-    return new MemoryService();
+    return new MemoryCommandService();
+}
+
+/**
+ * @return MemoryQueryService
+ */
+function makeMemoryQueryService(): MemoryQueryService
+{
+    return new MemoryQueryService();
 }
 
 /**
@@ -43,7 +55,7 @@ describe('listGlobalMemories', function (): void {
 
     it('returns empty array when no global memories exist', function (): void {
         [, , $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         $result = $service->listGlobalMemories($principalId);
 
@@ -53,7 +65,7 @@ describe('listGlobalMemories', function (): void {
 
     it('returns only global memories for this principal', function (): void {
         [, $agentId, $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         Memory::create([
             'principal_id' => $principalId,
@@ -90,7 +102,7 @@ describe('listGlobalMemories', function (): void {
     it('does not return another principals global memories', function (): void {
         [, , $principalId1] = createUserWithAgent('user1@test.com');
         [, , $principalId2] = createUserWithAgent('user2@test.com');
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         Memory::create([
             'principal_id' => $principalId1,
@@ -113,7 +125,7 @@ describe('listGlobalMemories', function (): void {
 
     it('orders by order field then by name', function (): void {
         [, , $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         Memory::create(['principal_id' => $principalId, 'scope' => 'global', 'type' => 'context', 'name' => 'zebra', 'order' => 1]);
         Memory::create(['principal_id' => $principalId, 'scope' => 'global', 'type' => 'context', 'name' => 'alpha', 'order' => 1]);
@@ -126,7 +138,7 @@ describe('listGlobalMemories', function (): void {
 
     it('filters by type when supplied', function (): void {
         [, , $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         Memory::create(['principal_id' => $principalId, 'scope' => 'global', 'type' => 'plan', 'name' => 'p']);
         Memory::create(['principal_id' => $principalId, 'scope' => 'global', 'type' => 'context', 'name' => 'c']);
@@ -139,7 +151,7 @@ describe('listGlobalMemories', function (): void {
 
     it('throws on unknown type filter', function (): void {
         [, , $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         expect(fn() => $service->listGlobalMemories($principalId, 'unknown'))
             ->toThrow(MemoryValidationException::class);
@@ -150,7 +162,7 @@ describe('listAgentMemories', function (): void {
 
     it(IT_AGENT_NOT_FOUND, function (): void {
         [, , $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         $result = $service->listAgentMemories(9999, $principalId);
 
@@ -159,7 +171,7 @@ describe('listAgentMemories', function (): void {
 
     it('returns empty array when no agent memories exist', function (): void {
         [, $agentId, $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         $result = $service->listAgentMemories($agentId, $principalId);
 
@@ -170,7 +182,7 @@ describe('listAgentMemories', function (): void {
     it('returns only memories for the specified agent', function (): void {
         [$userId, $agentId1, $principalId] = createUserWithAgent(AGENT1_EMAIL);
         $agentId2 = createAgentWithPrincipal($userId, AGENT2_NAME, ['max_steps' => 10]);
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         Memory::create(['principal_id' => $principalId, 'agent_id' => $agentId1, 'scope' => 'agent', 'type' => 'context', 'name' => 'memory_for_agent1']);
         Memory::create(['principal_id' => $principalId, 'agent_id' => $agentId2, 'scope' => 'agent', 'type' => 'context', 'name' => 'memory_for_agent2']);
@@ -183,7 +195,7 @@ describe('listAgentMemories', function (): void {
 
     it('filters by type when supplied', function (): void {
         [$userId, $agentId, $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         Memory::create(['principal_id' => $principalId, 'agent_id' => $agentId, 'scope' => 'agent', 'type' => 'plan', 'name' => 'plan_one']);
         Memory::create(['principal_id' => $principalId, 'agent_id' => $agentId, 'scope' => 'agent', 'type' => 'context', 'name' => 'ctx_one']);
@@ -314,7 +326,7 @@ describe('getGlobalMemory', function (): void {
 
     it(IT_MEMORY_NOT_FOUND, function (): void {
         [, , $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         $result = $service->getGlobalMemory('00000000-0000-4000-8000-000000000000', $principalId);
 
@@ -324,7 +336,7 @@ describe('getGlobalMemory', function (): void {
     it('returns null when memory belongs to another principal', function (): void {
         [, , $principalId1] = createUserWithAgent(OWNER_EMAIL);
         [, , $principalId2] = createUserWithAgent(OTHER_EMAIL);
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         $memory = Memory::create([
             'principal_id' => $principalId1,
@@ -340,7 +352,7 @@ describe('getGlobalMemory', function (): void {
 
     it('returns null when memory is agent-scoped (called with global endpoint)', function (): void {
         [, $agentId, $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         $memory = Memory::create([
             'principal_id' => $principalId,
@@ -357,7 +369,7 @@ describe('getGlobalMemory', function (): void {
 
     it('returns the memory when found', function (): void {
         [, , $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         $memory = Memory::create([
             'principal_id' => $principalId,
@@ -383,7 +395,7 @@ describe('getAgentMemory', function (): void {
 
     it(IT_AGENT_NOT_FOUND, function (): void {
         [, , $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         $result = $service->getAgentMemory('00000000-0000-4000-8000-000000000000', 9999, $principalId);
 
@@ -392,7 +404,7 @@ describe('getAgentMemory', function (): void {
 
     it(IT_MEMORY_NOT_FOUND, function (): void {
         [, $agentId, $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         $result = $service->getAgentMemory('00000000-0000-4000-8000-000000000000', $agentId, $principalId);
 
@@ -402,7 +414,7 @@ describe('getAgentMemory', function (): void {
     it('returns null when memory belongs to different agent', function (): void {
         [$userId, $agentId1, $principalId] = createUserWithAgent(OWNER_EMAIL);
         $agentId2 = createAgentWithPrincipal($userId, AGENT2_NAME, ['max_steps' => 10]);
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         $memory = Memory::create([
             'principal_id' => $principalId,
@@ -419,7 +431,7 @@ describe('getAgentMemory', function (): void {
 
     it('returns the memory when found', function (): void {
         [, $agentId, $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $service = makeMemoryQueryService();
 
         $memory = Memory::create([
             'principal_id' => $principalId,
@@ -963,15 +975,16 @@ describe('reorderGlobalMemories', function (): void {
 
     it('updates order values based on provided ID array', function (): void {
         [, , $principalId] = createUserWithAgent();
-        $service = makeMemoryService();
+        $command = makeMemoryService();
+        $query = makeMemoryQueryService();
 
-        $m1 = $service->createGlobalMemory($principalId, ['name' => 'first', 'type' => 'context']);
-        $m2 = $service->createGlobalMemory($principalId, ['name' => 'second', 'type' => 'context']);
-        $m3 = $service->createGlobalMemory($principalId, ['name' => 'third', 'type' => 'context']);
+        $m1 = $command->createGlobalMemory($principalId, ['name' => 'first', 'type' => 'context']);
+        $m2 = $command->createGlobalMemory($principalId, ['name' => 'second', 'type' => 'context']);
+        $m3 = $command->createGlobalMemory($principalId, ['name' => 'third', 'type' => 'context']);
 
-        $service->reorderGlobalMemories($principalId, [$m3['memory']['id'], $m1['memory']['id'], $m2['memory']['id']]);
+        $command->reorderGlobalMemories($principalId, [$m3['memory']['id'], $m1['memory']['id'], $m2['memory']['id']]);
 
-        $result = $service->listGlobalMemories($principalId);
+        $result = $query->listGlobalMemories($principalId);
 
         expect(array_column($result, 'order'))->toBe([1, 2, 3]);
         expect(array_column($result, 'id'))->toBe([$m3['memory']['id'], $m1['memory']['id'], $m2['memory']['id']]);
@@ -1000,18 +1013,19 @@ describe('reorderAgentMemories', function (): void {
     it('updates order values for the specified agent only', function (): void {
         [$userId, $agentId1, $principalId] = createUserWithAgent(AGENT1_EMAIL);
         $agentId2 = createAgentWithPrincipal($userId, AGENT2_NAME, ['max_steps' => 10]);
-        $service = makeMemoryService();
+        $command = makeMemoryService();
+        $query = makeMemoryQueryService();
 
-        $a1 = $service->createAgentMemory($agentId1, $principalId, ['name' => 'a1_first', 'type' => 'context']);
-        $a2 = $service->createAgentMemory($agentId2, $principalId, ['name' => 'a2_first', 'type' => 'context']);
-        $a1b = $service->createAgentMemory($agentId1, $principalId, ['name' => 'a1_second', 'type' => 'context']);
+        $a1 = $command->createAgentMemory($agentId1, $principalId, ['name' => 'a1_first', 'type' => 'context']);
+        $a2 = $command->createAgentMemory($agentId2, $principalId, ['name' => 'a2_first', 'type' => 'context']);
+        $a1b = $command->createAgentMemory($agentId1, $principalId, ['name' => 'a1_second', 'type' => 'context']);
 
-        $service->reorderAgentMemories($agentId1, $principalId, [$a1b['memory']['id'], $a1['memory']['id']]);
+        $command->reorderAgentMemories($agentId1, $principalId, [$a1b['memory']['id'], $a1['memory']['id']]);
 
-        $result = $service->listAgentMemories($agentId1, $principalId);
+        $result = $query->listAgentMemories($agentId1, $principalId);
         expect(array_column($result, 'id'))->toBe([$a1b['memory']['id'], $a1['memory']['id']]);
 
-        $result2 = $service->listAgentMemories($agentId2, $principalId);
+        $result2 = $query->listAgentMemories($agentId2, $principalId);
         expect($result2[0]['id'])->toBe($a2['memory']['id'])
             ->and($result2[0]['order'])->toBe(1);
     });

@@ -11,8 +11,10 @@ use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\AbstractPlugin;
 use Spora\Plugins\Memories\Http\AgentMemoryController;
 use Spora\Plugins\Memories\Http\MemoryController;
-use Spora\Plugins\Memories\Services\MemoryService;
-use Spora\Plugins\Memories\Services\MemoryServiceInterface;
+use Spora\Plugins\Memories\Services\MemoryCommandInterface;
+use Spora\Plugins\Memories\Services\MemoryCommandService;
+use Spora\Plugins\Memories\Services\MemoryQueryInterface;
+use Spora\Plugins\Memories\Services\MemoryQueryService;
 use Spora\Plugins\Memories\Tools\AgentMemoryTool;
 use Spora\Plugins\Memories\Tools\GlobalMemoryTool;
 use Spora\Services\PrincipalService;
@@ -40,16 +42,18 @@ final class MemoriesPlugin extends AbstractPlugin
     }
 
     /**
-     * Wire the service interface → concrete class autowire + the two
+     * Wire the service interfaces → concrete class autowire + the two
      * controllers. Invoked once per process during boot, before the
      * container is built.
      *
      * Adding explicit bindings here is necessary because the host `App`
-     * does not know about `MemoryServiceInterface`; without these
+     * does not know about the plugin's memory interfaces; without these
      * definitions, resolving either controller at request-dispatch time
-     * would fail with `EntryNotFoundException`. PHP-DI autowire resolves
-     * the `MemoryService(...)` ctor for us once we point the interface
-     * at the concrete class. `PrincipalService` is already globally
+     * would fail with `EntryNotFoundException`. The v2 split registered
+     * two narrow interfaces (`MemoryQueryInterface`, `MemoryCommandInterface`)
+     * so each side of the read/write split stays under Sonar's per-class
+     * method-count ceiling — controllers depend on whichever interfaces
+     * they actually call. `PrincipalService` is already globally
      * registered in spora-core; we re-list it here so the plugin's
      * container works when loaded standalone (e.g. in unit tests that
      * skip the host boot path).
@@ -59,7 +63,8 @@ final class MemoriesPlugin extends AbstractPlugin
     public function register(ContainerBuilder $builder): void
     {
         $builder->addDefinitions([
-            MemoryServiceInterface::class => \DI\autowire(MemoryService::class),
+            MemoryQueryInterface::class    => \DI\autowire(MemoryQueryService::class),
+            MemoryCommandInterface::class  => \DI\autowire(MemoryCommandService::class),
             MemoryController::class        => \DI\autowire(),
             AgentMemoryController::class   => \DI\autowire(),
             AgentMemoryTool::class         => \DI\autowire(),

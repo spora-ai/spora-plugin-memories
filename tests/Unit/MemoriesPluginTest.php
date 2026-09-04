@@ -7,7 +7,8 @@ use Spora\Plugins\Memories\Http\AgentMemoryController;
 use Spora\Plugins\Memories\Http\MemoryController;
 use Spora\Plugins\Memories\MemoriesApp;
 use Spora\Plugins\Memories\MemoriesPlugin;
-use Spora\Plugins\Memories\Services\MemoryServiceInterface;
+use Spora\Plugins\Memories\Services\MemoryCommandInterface;
+use Spora\Plugins\Memories\Services\MemoryQueryInterface;
 use Spora\Plugins\Memories\Tools\AgentMemoryTool;
 use Spora\Plugins\Memories\Tools\GlobalMemoryTool;
 use Spora\Services\PrincipalService;
@@ -84,7 +85,7 @@ it('MemoriesApp satisfies VueAppInterface contract (name + entry)', function ():
         ->and($app->entry())->toBe('main.js');
 });
 
-it('register() wires MemoryServiceInterface -> MemoryService autowire', function (): void {
+it('register() wires the two service interfaces to their concrete implementations', function (): void {
     $builder = new ContainerBuilder();
     $builder->useAutowiring(true);
 
@@ -92,8 +93,9 @@ it('register() wires MemoryServiceInterface -> MemoryService autowire', function
 
     $container = $builder->build();
 
-    expect($container->has(MemoryServiceInterface::class))->toBeTrue();
-    expect($container->has(MemoryController::class))->toBeTrue();
-    expect($container->has(AgentMemoryController::class))->toBeTrue();
-    expect($container->has(PrincipalService::class))->toBeTrue();
+    expect($container->has(MemoryQueryInterface::class))->toBeTrue()
+        ->and($container->has(MemoryCommandInterface::class))->toBeTrue()
+        ->and($container->has(MemoryController::class))->toBeTrue()
+        ->and($container->has(AgentMemoryController::class))->toBeTrue()
+        ->and($container->has(PrincipalService::class))->toBeTrue();
 });
