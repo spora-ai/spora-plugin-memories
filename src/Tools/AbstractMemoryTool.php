@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Memories\Tools;
 
-use RuntimeException;
 use Spora\Plugins\Memories\Models\Memory;
 use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
-use Spora\Plugins\Memories\Services\MemoryService;
+use Spora\Plugins\Memories\Services\MemoryTypes;
 use Spora\Services\PrincipalContext;
 use Spora\Services\Text\Utf8Sanitizer;
 use Spora\Tools\AbstractTool;
@@ -49,20 +48,19 @@ abstract class AbstractMemoryTool extends AbstractTool
     ): ToolResult {
         $operation = $this->getOperationName($arguments);
         $scope = $this->getScope();
-
-        $principalId = $this->resolvePrincipalId($context, $userId, $agentId);
+        $principalId = $this->resolvePrincipalId($context, $userId);
 
         return match ($operation) {
-            'list'    => $this->list($scope, $agentId, $principalId, $arguments),
-            'get'     => $this->getMemory($arguments, $scope, $agentId, $principalId),
-            'save'    => $this->saveMemory($arguments, $scope, $agentId, $principalId),
-            'replace' => $this->replaceMemory($arguments, $scope, $agentId, $principalId),
-            'delete'  => $this->deleteMemory($arguments, $scope, $agentId, $principalId),
+            'list'    => $this->describeList($scope, $agentId, $principalId, $arguments),
+            'get'     => $this->describeGet($arguments, $scope, $agentId, $principalId),
+            'save'    => $this->describeSave($arguments, $scope, $agentId, $principalId),
+            'replace' => $this->describeReplace($arguments, $scope, $agentId, $principalId),
+            'delete'  => $this->describeDelete($arguments, $scope, $agentId, $principalId),
             default   => new ToolResult(false, 'Invalid action. Must be list, get, save, replace, or delete.'),
         };
     }
 
-    private function resolvePrincipalId(?PrincipalContext $context, ?int $userId, int $agentId): int
+    private function resolvePrincipalId(?PrincipalContext $context, ?int $userId): int
     {
         if ($context !== null) {
             return $context->principalId;
@@ -70,7 +68,7 @@ abstract class AbstractMemoryTool extends AbstractTool
         if ($userId !== null) {
             return $userId;
         }
-        throw new RuntimeException(
+        throw new MemoryValidationException(
             'Cannot resolve principal id for memory tool execution: no PrincipalContext and no legacy userId fallback.',
         );
     }
@@ -110,7 +108,18 @@ abstract class AbstractMemoryTool extends AbstractTool
         return new ToolResult(true, implode("\n", $lines));
     }
 
-    public function getMemory(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
+    /**
+     * @param array<string, mixed> $arguments
+     */
+    private function describeList(string $scope, int $agentId, int $principalId, array $arguments): ToolResult
+    {
+        return $this->list($scope, $agentId, $principalId, $arguments);
+    }
+
+    /**
+     * @param array<string, mixed> $arguments
+     */
+    private function describeGet(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
         $name = trim((string) ($arguments['name'] ?? ''));
         if ($name === '') {
@@ -136,7 +145,10 @@ abstract class AbstractMemoryTool extends AbstractTool
         return new ToolResult(true, $header . ($memory->content ?? ''));
     }
 
-    public function saveMemory(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
+    /**
+     * @param array<string, mixed> $arguments
+     */
+    private function describeSave(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
         $name = trim((string) ($arguments['name'] ?? ''));
         if ($name === '') {
@@ -170,7 +182,10 @@ abstract class AbstractMemoryTool extends AbstractTool
         return new ToolResult(true, "Created memory [{$name}] (type={$type}) in {$scope} scope.");
     }
 
-    public function replaceMemory(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
+    /**
+     * @param array<string, mixed> $arguments
+     */
+    private function describeReplace(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
     {
         $name = trim((string) ($arguments['name'] ?? ''));
         if ($name === '') {
@@ -206,6 +221,30 @@ abstract class AbstractMemoryTool extends AbstractTool
         return new ToolResult(true, "Replaced 1 occurrence in [{$name}] (type={$type}).");
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     */
+    private function describeDelete(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
+    {
+        $name = trim((string) ($arguments['name'] ?? ''));
+        if ($name === '') {
+            return new ToolResult(false, 'Error: name is required for delete action.');
+        }
+
+        $type = (string) ($arguments['type'] ?? '');
+        if ($type === '') {
+            return new ToolResult(false, 'Error: type is required for delete action.');
+        }
+
+        $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
+        if ($memory === null) {
+            return new ToolResult(false, "Memory [{$name}] (type={$type}) not found in {$scope} scope.");
+        }
+        $memory->delete();
+
+        return new ToolResult(true, "Deleted memory [{$name}] (type={$type}) from {$scope} scope.");
+    }
+
     private function updateMemoryFields(Memory $memory, string $content, ?string $summary, int $order): void
     {
         $memory->content = Utf8Sanitizer::scrubString($content);
@@ -216,6 +255,14 @@ abstract class AbstractMemoryTool extends AbstractTool
         $memory->save();
     }
 
+    /**
+     * The 8-arg signature (scope, agentId, principalId, name, type, summary,
+     * content, order) is justified: every parameter is read in exactly one
+     * of the global/agent branches of the body's `if`, and threading a value
+     * object through both sides would only obscure the per-branch field
+     * assignments. Splitting would force callers to instantiate the VO for
+     * both branches even when only one path is reachable.
+     */
     private function createMemory(string $scope, int $agentId, int $principalId, string $name, string $type, ?string $summary, string $content, int $order): void
     {
         $memory = new Memory();
@@ -237,27 +284,6 @@ abstract class AbstractMemoryTool extends AbstractTool
     private function deriveSummary(string $content): ?string
     {
         return $content !== '' ? mb_substr(strip_tags($content), 0, 200) : null;
-    }
-
-    public function deleteMemory(array $arguments, string $scope, int $agentId, int $principalId): ToolResult
-    {
-        $name = trim((string) ($arguments['name'] ?? ''));
-        if ($name === '') {
-            return new ToolResult(false, 'Error: name is required for delete action.');
-        }
-
-        $type = (string) ($arguments['type'] ?? '');
-        if ($type === '') {
-            return new ToolResult(false, 'Error: type is required for delete action.');
-        }
-
-        $memory = $this->findMemory($name, $type, $scope, $agentId, $principalId);
-        if ($memory === null) {
-            return new ToolResult(false, "Memory [{$name}] (type={$type}) not found in {$scope} scope.");
-        }
-        $memory->delete();
-
-        return new ToolResult(true, "Deleted memory [{$name}] (type={$type}) from {$scope} scope.");
     }
 
     private function findMemory(string $name, string $type, string $scope, int $agentId, int $principalId): ?Memory
@@ -290,9 +316,9 @@ abstract class AbstractMemoryTool extends AbstractTool
      */
     private function validateType(string $type): void
     {
-        if ($type === '' || !in_array($type, MemoryService::DOCUMENT_TYPES, true)) {
+        if ($type === '' || !in_array($type, MemoryTypes::DOCUMENT_TYPES, true)) {
             throw new MemoryValidationException(
-                sprintf("type '%s' is not one of: %s", $type, implode(', ', MemoryService::DOCUMENT_TYPES)),
+                sprintf("type '%s' is not one of: %s", $type, implode(', ', MemoryTypes::DOCUMENT_TYPES)),
             );
         }
     }
