@@ -8,6 +8,7 @@ use Illuminate\Database\Capsule\Manager as Capsule;
 use Spora\Models\Agent;
 use Spora\Plugins\Memories\Models\Memory;
 use Spora\Services\Exceptions\AgentNotFoundException;
+use Spora\Services\PrincipalResolver;
 
 /**
  * Write-side service for the memories domain — create, update, replace,
@@ -18,6 +19,12 @@ use Spora\Services\Exceptions\AgentNotFoundException;
  * side stays under Sonar's per-class method-count ceiling. Validation
  * lives in {@see MemoryValidator} and content-string edits in
  * {@see MemoryContentEditor}; this class only orchestrates them.
+ *
+ * Agent-scoped methods now resolve `$principalId` back to a user id
+ * through {@see PrincipalResolver::ownerUserId()} so the visibility
+ * gate at {@see PrincipalResolver::isVisibleTo()} expands to the
+ * user's full principal set — see the matching rationale on
+ * {@see MemoryQueryService}.
  *
  * `AgentNotFoundException` lives in `Spora\Services\Exceptions\` (a core
  * class) because Agent is a core model — moving the exception to the
@@ -32,8 +39,9 @@ final class MemoryCommandService implements MemoryCommandInterface
     private readonly MemoryValidator $validator;
     private readonly MemoryContentEditor $contentEditor;
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly PrincipalResolver $principals = new PrincipalResolver(),
+    ) {
         $this->validator      = new MemoryValidator();
         $this->contentEditor  = new MemoryContentEditor();
     }
@@ -43,6 +51,7 @@ final class MemoryCommandService implements MemoryCommandInterface
         $this->validator->validate($data, isCreation: true);
 
         $memory = $this->newMemory('global', null, $principalId, $data);
+        $memory->order = $this->getNextOrderForGlobal($principalId);
         $this->insertWithTimestamps($memory, date(self::DATETIME_FORMAT));
 
         return ['memory' => MemoryResource::toArray($memory)];
@@ -57,6 +66,7 @@ final class MemoryCommandService implements MemoryCommandInterface
         $this->validator->validate($data, isCreation: true);
 
         $memory = $this->newMemory('agent', $agentId, $principalId, $data);
+        $memory->order = $this->getNextOrderForAgent($agentId);
         $this->insertWithTimestamps($memory, date(self::DATETIME_FORMAT));
 
         return ['memory' => MemoryResource::toArray($memory)];
@@ -65,7 +75,10 @@ final class MemoryCommandService implements MemoryCommandInterface
     /**
      * Materialise a fresh Memory row with the standard field set; the
      * createGlobalMemory / createAgentMemory callers differ only in
-     * scope ('global' vs 'agent') and the corresponding owner id.
+     * scope ('global' vs 'agent') and the corresponding owner id. The
+     * `principalId` argument is unused in agent scope (`agent_id` keys
+     * the row instead); it is recorded on the row as `principal_id` for
+     * global memories only.
      *
      * @param array<string, mixed> $data
      */
@@ -84,7 +97,6 @@ final class MemoryCommandService implements MemoryCommandInterface
         $memory->name = $data['name'];
         $memory->summary = isset($payload['summary']) ? trim((string) $payload['summary']) : null;
         $memory->content = isset($payload['content']) ? trim((string) $payload['content']) : null;
-        $memory->order = $this->getNextOrder($agentId, $principalId);
 
         return $memory;
     }
@@ -224,7 +236,6 @@ final class MemoryCommandService implements MemoryCommandInterface
             throw new AgentNotFoundException('Agent not found');
         }
 
-        // Process only IDs that actually belong to this agent, preserving input order
         $order = 1;
         foreach ($orderedIds as $memoryId) {
             $updated = Capsule::table('memories')
@@ -282,8 +293,6 @@ final class MemoryCommandService implements MemoryCommandInterface
             'created_at'   => $now,
             'updated_at'   => $now,
         ]);
-        // Repopulate the Carbon accessors so the resource() round-trip yields
-        // a populated created_at/updated_at without a second SELECT.
         $memory->setRawAttributes([
             'id'           => $memory->id,
             'principal_id' => $memory->principal_id,
@@ -311,20 +320,41 @@ final class MemoryCommandService implements MemoryCommandInterface
             ->update(['updated_at' => date(self::DATETIME_FORMAT)]);
     }
 
+    /**
+     * Visibility-gated agent lookup. The pre-v2.1 implementation matched
+     * `principal_id = $principalId` against the caller's personal
+     * principal id, which silently 404'd every agent owned by a group
+     * the user belongs to. We now route through {@see PrincipalResolver::ownerUserId()}
+     * to recover the calling user id from the acting principal, then
+     * hand off to {@see PrincipalResolver::isVisibleTo()} which expands
+     * to the user's full principal set.
+     */
     private function findAgent(int $id, int $principalId): ?Agent
     {
-        return Agent::where('id', $id)->where('principal_id', $principalId)->first();
+        $userId = $this->principals->ownerUserId($principalId);
+        if ($userId === null) {
+            return null;
+        }
+
+        return $this->principals->isVisibleTo($id, $userId) ? Agent::find($id) : null;
     }
 
-    private function getNextOrder(?int $agentId, int $principalId): int
+    private function getNextOrderForGlobal(int $principalId): int
     {
-        $query = Memory::where('scope', $agentId === null ? 'global' : 'agent');
-        if ($agentId === null) {
-            $query->where('principal_id', $principalId);
-        } else {
-            $query->where('agent_id', $agentId);
-        }
-        $max = $query->max('order');
+        $max = Capsule::table('memories')
+            ->where('scope', 'global')
+            ->where('principal_id', $principalId)
+            ->max('order');
+
+        return $max !== null ? ((int) $max) + 1 : 1;
+    }
+
+    private function getNextOrderForAgent(int $agentId): int
+    {
+        $max = Capsule::table('memories')
+            ->where('scope', 'agent')
+            ->where('agent_id', $agentId)
+            ->max('order');
 
         return $max !== null ? ((int) $max) + 1 : 1;
     }

@@ -46,7 +46,12 @@ abstract class AbstractMemoryController
     ) {}
 
     /**
-     * Resolve the principal id once per request. Re-throws
+     * Resolve the principal id once per request. Both controllers feed
+     * this into the service layer; agent-scoped services then route it
+     * through {@see \Spora\Services\PrincipalResolver::ownerUserId()} so
+     * the visibility gate at
+     * {@see \Spora\Services\PrincipalResolver::isVisibleTo()} expands to
+     * the user's full principal set. Re-throws
      * {@see PrincipalMaterialisationException} verbatim instead of wrapping
      * it in a generic RuntimeException so the HTTP layer can recognise
      * the failure mode without parsing messages.

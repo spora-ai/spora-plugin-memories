@@ -18,6 +18,9 @@ interface MemoryCommandInterface
     public function createGlobalMemory(int $principalId, array $data): array;
 
     /**
+     * The agent must be reachable from the principal that owns `$principalId`.
+     * See {@see MemoryQueryInterface::listAgentMemories()} for the rationale.
+     *
      * @param array<string, mixed> $data
      * @return array
      */

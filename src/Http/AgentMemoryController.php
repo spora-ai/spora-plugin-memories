@@ -14,7 +14,11 @@ use Symfony\Component\HttpFoundation\Request;
  * replacement. Agent memories are keyed by `agent_id` and travel with the
  * agent across principal transfers — the principal id from the controller
  * is used only as an ownership-gate to make sure the caller can see the
- * agent before any service call lands.
+ * agent before any service call lands. The service layer routes that
+ * principal id through {@see \Spora\Services\PrincipalResolver::ownerUserId()}
+ * and {@see \Spora\Services\PrincipalResolver::isVisibleTo()} so
+ * group-owned agents reach every group member, not just the caller's
+ * personal principal.
  */
 final class AgentMemoryController extends AbstractMemoryController
 {

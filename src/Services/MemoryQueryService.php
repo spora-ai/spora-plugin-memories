@@ -7,7 +7,7 @@ namespace Spora\Plugins\Memories\Services;
 use Spora\Models\Agent;
 use Spora\Plugins\Memories\Models\Memory;
 use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
-use Spora\Services\Exceptions\AgentNotFoundException;
+use Spora\Services\PrincipalResolver;
 
 /**
  * Read-side service for the memories domain — list + get operations
@@ -16,14 +16,22 @@ use Spora\Services\Exceptions\AgentNotFoundException;
  * Lives next to {@see MemoryCommandService} after the v2 split so each
  * side stays under Sonar's per-class method-count ceiling.
  *
- * `AgentNotFoundException` lives in `Spora\Services\Exceptions\` (a core
- * class) because Agent is a core model — moving the exception to the
- * plugin namespace would force callers outside the plugin to import two
- * namespaces for the same concept. The exception stays in core; this
- * service throws it when the agent for the requested memory is missing.
+ * Agent-scoped methods take `$principalId` (the caller's "acting
+ * principal") and resolve it back to a user id through
+ * {@see PrincipalResolver::ownerUserId()} so the visibility gate at
+ * {@see PrincipalResolver::isVisibleTo()} expands to the user's full
+ * principal set. The pre-v2.1 implementation used strict
+ * `principal_id = $principalId` against the user's personal principal
+ * id, which silently 404'd every agent owned by a group the user
+ * happens to belong to — see the `GroupVisibilityTest` suite for
+ * coverage of that path.
  */
 final class MemoryQueryService implements MemoryQueryInterface
 {
+    public function __construct(
+        private readonly PrincipalResolver $principals = new PrincipalResolver(),
+    ) {}
+
     public function listGlobalMemories(int $principalId, ?string $type = null): array
     {
         $query = Memory::forPrincipal($principalId)->orderBy('order')->orderBy('name');
@@ -99,6 +107,11 @@ final class MemoryQueryService implements MemoryQueryInterface
 
     private function findAgent(int $id, int $principalId): ?Agent
     {
-        return Agent::where('id', $id)->where('principal_id', $principalId)->first();
+        $userId = $this->principals->ownerUserId($principalId);
+        if ($userId === null) {
+            return null;
+        }
+
+        return $this->principals->isVisibleTo($id, $userId) ? Agent::find($id) : null;
     }
 }
