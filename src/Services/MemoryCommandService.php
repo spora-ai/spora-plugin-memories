@@ -188,7 +188,9 @@ final class MemoryCommandService implements MemoryCommandInterface
         $newText = (string) ($data['new_text'] ?? '');
         $memory->content = $this->contentEditor->replaceInMemoryContent((string) ($memory->content ?? ''), $find, $newText);
         $memory->save();
-        $this->touchUpdatedAt((string) $memory->id);
+        Capsule::table('memories')
+            ->where('id', (string) $memory->id)
+            ->update(['updated_at' => date(self::DATETIME_FORMAT)]);
 
         return ['memory' => MemoryResource::toArray($memory->refresh())];
     }
@@ -306,18 +308,6 @@ final class MemoryCommandService implements MemoryCommandInterface
             'created_at'   => $now,
             'updated_at'   => $now,
         ], true);
-    }
-
-    /**
-     * Bump updated_at via raw SQL — sidesteps PHPStan's strict typing on
-     * `$memory->updated_at` (cast to `Carbon\Carbon`) while keeping Eloquent's
-     * mutator pipeline for everything else.
-     */
-    private function touchUpdatedAt(string $memoryId): void
-    {
-        Capsule::table('memories')
-            ->where('id', $memoryId)
-            ->update(['updated_at' => date(self::DATETIME_FORMAT)]);
     }
 
     /**
