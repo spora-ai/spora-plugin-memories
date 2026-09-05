@@ -43,11 +43,9 @@ final class AgentMemoryController extends AbstractMemoryController
             return $this->forbidden($e->getMessage());
         }
 
-        if ($memories === null) {
-            return $this->notFound();
-        }
-
-        return new JsonResponse(['data' => ['memories' => $memories]]);
+        return $memories === null
+            ? $this->notFound()
+            : new JsonResponse(['data' => ['memories' => $memories]]);
     }
 
     /**
@@ -65,11 +63,7 @@ final class AgentMemoryController extends AbstractMemoryController
             }
 
             $validationError = $this->validateCreateInput($body);
-            if ($validationError !== null) {
-                return $validationError;
-            }
-
-            return $this->runCreate(fn() => $this->memoryCommand->createAgentMemory($agentId, $principalId, $body));
+            return $validationError ?? $this->runCreate(fn() => $this->memoryCommand->createAgentMemory($agentId, $principalId, $body));
         } catch (PrincipalNotAccessibleException $e) {
             return $this->forbidden($e->getMessage());
         }
@@ -90,11 +84,7 @@ final class AgentMemoryController extends AbstractMemoryController
             return $this->forbidden($e->getMessage());
         }
 
-        if ($result === null) {
-            return $this->notFound();
-        }
-
-        return new JsonResponse(['data' => $result]);
+        return $result === null ? $this->notFound() : new JsonResponse(['data' => $result]);
     }
 
     /**
@@ -134,11 +124,7 @@ final class AgentMemoryController extends AbstractMemoryController
             }
 
             $validationError = $this->validateReplaceInput($body);
-            if ($validationError !== null) {
-                return $validationError;
-            }
-
-            return $this->runReplace(fn() => $this->memoryCommand->replaceAgentMemory($memoryId, $agentId, $principalId, $body));
+            return $validationError ?? $this->runReplace(fn() => $this->memoryCommand->replaceAgentMemory($memoryId, $agentId, $principalId, $body));
         } catch (PrincipalNotAccessibleException $e) {
             return $this->forbidden($e->getMessage());
         }
@@ -159,11 +145,7 @@ final class AgentMemoryController extends AbstractMemoryController
             return $this->forbidden($e->getMessage());
         }
 
-        if (! $deleted) {
-            return $this->notFound();
-        }
-
-        return new JsonResponse(['data' => ['deleted' => true]]);
+        return $deleted ? new JsonResponse(['data' => ['deleted' => true]]) : $this->notFound();
     }
 
     /**

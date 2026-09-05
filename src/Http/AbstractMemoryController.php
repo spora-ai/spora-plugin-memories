@@ -216,12 +216,8 @@ abstract class AbstractMemoryController
         try {
             $result = $operation();
             return new JsonResponse(['data' => $result], Response::HTTP_CREATED);
-        } catch (MemoryValidationException $e) {
-            return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
-        } catch (PrincipalNotAccessibleException $e) {
-            return $this->forbidden($e->getMessage());
-        } catch (AgentNotFoundException) {
-            return $this->notFound();
+        } catch (Throwable $e) {
+            return $this->translateMemoryFailure($e);
         }
     }
 
@@ -235,17 +231,13 @@ abstract class AbstractMemoryController
     {
         try {
             $result = $operation();
-        } catch (MemoryValidationException $e) {
-            return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
-        } catch (PrincipalNotAccessibleException $e) {
-            return $this->forbidden($e->getMessage());
+        } catch (Throwable $e) {
+            return $this->translateMemoryFailure($e);
         }
 
-        if ($result === null) {
-            return $this->notFound();
-        }
-
-        return new JsonResponse(['data' => $result]);
+        return $result === null
+            ? $this->notFound()
+            : new JsonResponse(['data' => $result]);
     }
 
     /**
@@ -262,13 +254,33 @@ abstract class AbstractMemoryController
 
         try {
             $operation($order);
-        } catch (PrincipalNotAccessibleException $e) {
+            return new JsonResponse(['data' => ['success' => true]]);
+        } catch (Throwable $e) {
+            return $this->translateMemoryFailure($e);
+        }
+    }
+
+    /**
+     * Map service-layer exceptions to the matching HTTP envelope.
+     * Centralised so the per-op wrappers (`runCreate`/`runUpdate`/
+     * `runReorder`) stay under SonarCloud's S1142 3-return cap.
+     * Unknown exception types bubble up to a 500 via the framework
+     * error handler — we don't try to translate every possible throw.
+     */
+    private function translateMemoryFailure(Throwable $e): JsonResponse
+    {
+        if ($e instanceof MemoryValidationException) {
+            return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        if ($e instanceof PrincipalNotAccessibleException) {
             return $this->forbidden($e->getMessage());
-        } catch (AgentNotFoundException) {
+        }
+        if ($e instanceof AgentNotFoundException) {
             return $this->notFound();
         }
 
-        return new JsonResponse(['data' => ['success' => true]]);
+        // Re-throw so the global error handler can log + 500 it.
+        throw $e;
     }
 
     protected function error(string $code, string $message, int $status): JsonResponse

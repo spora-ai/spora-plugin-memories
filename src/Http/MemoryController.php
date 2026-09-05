@@ -55,11 +55,7 @@ final class MemoryController extends AbstractMemoryController
             }
 
             $validationError = $this->validateCreateInput($body);
-            if ($validationError !== null) {
-                return $validationError;
-            }
-
-            return $this->runCreate(fn() => $this->memoryCommand->createGlobalMemory($principalId, $body));
+            return $validationError ?? $this->runCreate(fn() => $this->memoryCommand->createGlobalMemory($principalId, $body));
         } catch (PrincipalNotAccessibleException $e) {
             return $this->forbidden($e->getMessage());
         }
@@ -79,11 +75,7 @@ final class MemoryController extends AbstractMemoryController
             return $this->forbidden($e->getMessage());
         }
 
-        if ($result === null) {
-            return $this->notFound();
-        }
-
-        return new JsonResponse(['data' => $result]);
+        return $result === null ? $this->notFound() : new JsonResponse(['data' => $result]);
     }
 
     /**
@@ -121,11 +113,7 @@ final class MemoryController extends AbstractMemoryController
             }
 
             $validationError = $this->validateReplaceInput($body);
-            if ($validationError !== null) {
-                return $validationError;
-            }
-
-            return $this->runReplace(fn() => $this->memoryCommand->replaceGlobalMemory($memoryId, $principalId, $body));
+            return $validationError ?? $this->runReplace(fn() => $this->memoryCommand->replaceGlobalMemory($memoryId, $principalId, $body));
         } catch (PrincipalNotAccessibleException $e) {
             return $this->forbidden($e->getMessage());
         }
@@ -145,11 +133,7 @@ final class MemoryController extends AbstractMemoryController
             return $this->forbidden($e->getMessage());
         }
 
-        if (! $deleted) {
-            return $this->notFound();
-        }
-
-        return new JsonResponse(['data' => ['deleted' => true]]);
+        return $deleted ? new JsonResponse(['data' => ['deleted' => true]]) : $this->notFound();
     }
 
     /**
