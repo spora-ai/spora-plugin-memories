@@ -7,9 +7,7 @@ namespace Spora\Plugins\Memories\Services;
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Spora\Models\Agent;
 use Spora\Plugins\Memories\Models\Memory;
-use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
 use Spora\Services\Exceptions\AgentNotFoundException;
-use Spora\Services\Text\Utf8Sanitizer;
 
 /**
  * Write-side service for the memories domain — create, update, replace,
@@ -17,7 +15,9 @@ use Spora\Services\Text\Utf8Sanitizer;
  * and agent-scoped memories.
  *
  * Lives next to {@see MemoryQueryService} after the v2 split so each
- * side stays under Sonar's per-class method-count ceiling.
+ * side stays under Sonar's per-class method-count ceiling. Validation
+ * lives in {@see MemoryValidator} and content-string edits in
+ * {@see MemoryContentEditor}; this class only orchestrates them.
  *
  * `AgentNotFoundException` lives in `Spora\Services\Exceptions\` (a core
  * class) because Agent is a core model — moving the exception to the
@@ -29,9 +29,18 @@ final class MemoryCommandService implements MemoryCommandInterface
 {
     private const DATETIME_FORMAT = 'Y-m-d H:i:s';
 
+    private readonly MemoryValidator $validator;
+    private readonly MemoryContentEditor $contentEditor;
+
+    public function __construct()
+    {
+        $this->validator      = new MemoryValidator();
+        $this->contentEditor  = new MemoryContentEditor();
+    }
+
     public function createGlobalMemory(int $principalId, array $data): array
     {
-        $this->validate($data, isCreation: true);
+        $this->validator->validate($data, isCreation: true);
 
         $memory = $this->newMemory('global', null, $principalId, $data);
         $this->insertWithTimestamps($memory, date(self::DATETIME_FORMAT));
@@ -45,7 +54,7 @@ final class MemoryCommandService implements MemoryCommandInterface
             throw new AgentNotFoundException('Agent not found');
         }
 
-        $this->validate($data, isCreation: true);
+        $this->validator->validate($data, isCreation: true);
 
         $memory = $this->newMemory('agent', $agentId, $principalId, $data);
         $this->insertWithTimestamps($memory, date(self::DATETIME_FORMAT));
@@ -62,7 +71,7 @@ final class MemoryCommandService implements MemoryCommandInterface
      */
     private function newMemory(string $scope, ?int $agentId, int $principalId, array $data): Memory
     {
-        $payload = self::scrubStringFields($data, 'summary', 'content');
+        $payload = $this->contentEditor->scrubStringFields($data, 'summary', 'content');
         $memory = new Memory();
         $memory->id = $memory->newUniqueId();
         if ($scope === 'global') {
@@ -113,19 +122,19 @@ final class MemoryCommandService implements MemoryCommandInterface
      */
     private function applyUpdate(Memory $memory, array $data): void
     {
-        $this->validate($data, isCreation: false);
+        $this->validator->validate($data, isCreation: false);
 
         $allowed = ['name', 'summary', 'content', 'order', 'type'];
         $updateData = array_intersect_key($data, array_flip($allowed));
         if (isset($updateData['type'])) {
-            $this->validateType($updateData['type']);
+            $this->validator->validateType($updateData['type']);
         }
 
         if ($updateData !== []) {
             if (isset($updateData['order'])) {
                 $updateData['order'] = (int) $updateData['order'];
             }
-            $updateData = self::scrubStringFields($updateData, 'summary', 'content');
+            $updateData = $this->contentEditor->scrubStringFields($updateData, 'summary', 'content');
             Capsule::table('memories')
                 ->where('id', $memory->id)
                 ->update(array_merge($updateData, ['updated_at' => date(self::DATETIME_FORMAT)]));
@@ -165,7 +174,7 @@ final class MemoryCommandService implements MemoryCommandInterface
     {
         $find = (string) ($data['find'] ?? '');
         $newText = (string) ($data['new_text'] ?? '');
-        $memory->content = $this->replaceInMemoryContent((string) ($memory->content ?? ''), $find, $newText);
+        $memory->content = $this->contentEditor->replaceInMemoryContent((string) ($memory->content ?? ''), $find, $newText);
         $memory->save();
         $this->touchUpdatedAt((string) $memory->id);
 
@@ -229,32 +238,26 @@ final class MemoryCommandService implements MemoryCommandInterface
         }
     }
 
+    /**
+     * Interface passthrough — delegates to {@see MemoryValidator} so the
+     * enum check lives in one place. Kept on the public surface because
+     * callers (and tests) reach for `$service->validateType(...)`.
+     *
+     * @throws Exceptions\MemoryValidationException
+     */
     public function validateType(string $type): void
     {
-        if (!in_array($type, MemoryTypes::DOCUMENT_TYPES, true)) {
-            throw new MemoryValidationException(
-                sprintf(
-                    "type '%s' is not one of: %s",
-                    $type,
-                    implode(', ', MemoryTypes::DOCUMENT_TYPES),
-                ),
-            );
-        }
+        $this->validator->validateType($type);
     }
 
+    /**
+     * Interface passthrough — delegates to {@see MemoryContentEditor}.
+     *
+     * @throws Exceptions\MemoryValidationException
+     */
     public function replaceInMemoryContent(string $current, string $find, string $newText): string
     {
-        $count = mb_substr_count($current, $find);
-        if ($count === 0) {
-            throw new MemoryValidationException("find matches 0 occurrences.");
-        }
-        if ($count > 1) {
-            throw new MemoryValidationException(
-                "find matches {$count} > 1 occurrences; provide a unique substring.",
-            );
-        }
-
-        return Utf8Sanitizer::scrubString(str_replace($find, $newText, $current));
+        return $this->contentEditor->replaceInMemoryContent($current, $find, $newText);
     }
 
     /**
@@ -325,48 +328,4 @@ final class MemoryCommandService implements MemoryCommandInterface
 
         return $max !== null ? ((int) $max) + 1 : 1;
     }
-
-    /**
-     * @param array<string, mixed> $data
-     */
-    private function validate(array $data, bool $isCreation): void
-    {
-        if ($isCreation) {
-            $name = trim((string) ($data['name'] ?? ''));
-            if ($name === '') {
-                throw new MemoryValidationException('name is required');
-            }
-            $type = $data['type'] ?? null;
-            if (!is_string($type) || $type === '') {
-                throw new MemoryValidationException('type is required');
-            }
-            $this->validateType($type);
-            return;
-        }
-        if (array_key_exists('name', $data) && trim((string) $data['name']) === '') {
-            throw new MemoryValidationException('name cannot be empty');
-        }
-        if (array_key_exists('type', $data)) {
-            if (!is_string($data['type']) || $data['type'] === '') {
-                throw new MemoryValidationException('type cannot be empty');
-            }
-            $this->validateType($data['type']);
-        }
-    }
-
-    /**
-     * @param array<string, mixed> $data
-     * @param string ...$fields
-     * @return array<string, mixed>
-     */
-    private static function scrubStringFields(array $data, string ...$fields): array
-    {
-        foreach ($fields as $field) {
-            if (isset($data[$field]) && is_string($data[$field])) {
-                $data[$field] = Utf8Sanitizer::scrubString($data[$field]);
-            }
-        }
-        return $data;
-    }
-
 }
