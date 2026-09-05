@@ -6,6 +6,7 @@ namespace Spora\Plugins\Memories\Http;
 
 use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
 use Spora\Services\Exceptions\AgentNotFoundException;
+use Spora\Services\Exceptions\PrincipalNotAccessibleException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -16,6 +17,10 @@ use Symfony\Component\HttpFoundation\Request;
  * The principal id is resolved once per request via
  * {@see AbstractMemoryController::requestPrincipalId()} — mirroring how
  * the typst and media-archive plugins anchor writes to a principal.
+ * When the frontend's `PrincipalChipRow` is on a group principal, the
+ * caller sends `?principal_id=<group>` on every request; the resolver
+ * honours it when the caller controls it (i.e. is `admin`/`owner` of
+ * the group) and 403s otherwise.
  */
 final class MemoryController extends AbstractMemoryController
 {
@@ -24,10 +29,14 @@ final class MemoryController extends AbstractMemoryController
      */
     public function index(Request $request): JsonResponse
     {
-        $principalId = $this->requestPrincipalId();
-        $type = $request->query->get('type');
+        try {
+            $principalId = $this->requestPrincipalId($request);
+            $type = $request->query->get('type');
 
-        $memories = $this->memoryQuery->listGlobalMemories($principalId, is_string($type) && $type !== '' ? $type : null);
+            $memories = $this->memoryQuery->listGlobalMemories($principalId, is_string($type) && $type !== '' ? $type : null);
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
+        }
 
         return new JsonResponse(['data' => ['memories' => $memories]]);
     }
@@ -37,19 +46,23 @@ final class MemoryController extends AbstractMemoryController
      */
     public function store(Request $request): JsonResponse
     {
-        $principalId = $this->requestPrincipalId();
+        try {
+            $principalId = $this->requestPrincipalId($request);
 
-        $body = $this->decodeRequestBody($request);
-        if ($body instanceof JsonResponse) {
-            return $body;
+            $body = $this->decodeRequestBody($request);
+            if ($body instanceof JsonResponse) {
+                return $body;
+            }
+
+            $validationError = $this->validateCreateInput($body);
+            if ($validationError !== null) {
+                return $validationError;
+            }
+
+            return $this->runCreate(fn() => $this->memoryCommand->createGlobalMemory($principalId, $body));
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         }
-
-        $validationError = $this->validateCreateInput($body);
-        if ($validationError !== null) {
-            return $validationError;
-        }
-
-        return $this->runCreate(fn() => $this->memoryCommand->createGlobalMemory($principalId, $body));
     }
 
     /**
@@ -57,10 +70,14 @@ final class MemoryController extends AbstractMemoryController
      */
     public function show(Request $request): JsonResponse
     {
-        $principalId = $this->requestPrincipalId();
-        $memoryId = (string) $request->attributes->get('id', '');
+        try {
+            $principalId = $this->requestPrincipalId($request);
+            $memoryId = (string) $request->attributes->get('id', '');
 
-        $result = $this->memoryQuery->getGlobalMemory($memoryId, $principalId);
+            $result = $this->memoryQuery->getGlobalMemory($memoryId, $principalId);
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
+        }
 
         if ($result === null) {
             return $this->notFound();
@@ -74,15 +91,19 @@ final class MemoryController extends AbstractMemoryController
      */
     public function update(Request $request): JsonResponse
     {
-        $principalId = $this->requestPrincipalId();
-        $memoryId = (string) $request->attributes->get('id', '');
+        try {
+            $principalId = $this->requestPrincipalId($request);
+            $memoryId = (string) $request->attributes->get('id', '');
 
-        $body = $this->decodeRequestBody($request);
-        if ($body instanceof JsonResponse) {
-            return $body;
+            $body = $this->decodeRequestBody($request);
+            if ($body instanceof JsonResponse) {
+                return $body;
+            }
+
+            return $this->runUpdate(fn() => $this->memoryCommand->updateGlobalMemory($memoryId, $principalId, $body));
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         }
-
-        return $this->runUpdate(fn() => $this->memoryCommand->updateGlobalMemory($memoryId, $principalId, $body));
     }
 
     /**
@@ -90,20 +111,24 @@ final class MemoryController extends AbstractMemoryController
      */
     public function replace(Request $request): JsonResponse
     {
-        $principalId = $this->requestPrincipalId();
-        $memoryId = (string) $request->attributes->get('id', '');
+        try {
+            $principalId = $this->requestPrincipalId($request);
+            $memoryId = (string) $request->attributes->get('id', '');
 
-        $body = $this->decodeRequestBody($request);
-        if ($body instanceof JsonResponse) {
-            return $body;
+            $body = $this->decodeRequestBody($request);
+            if ($body instanceof JsonResponse) {
+                return $body;
+            }
+
+            $validationError = $this->validateReplaceInput($body);
+            if ($validationError !== null) {
+                return $validationError;
+            }
+
+            return $this->runReplace(fn() => $this->memoryCommand->replaceGlobalMemory($memoryId, $principalId, $body));
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         }
-
-        $validationError = $this->validateReplaceInput($body);
-        if ($validationError !== null) {
-            return $validationError;
-        }
-
-        return $this->runReplace(fn() => $this->memoryCommand->replaceGlobalMemory($memoryId, $principalId, $body));
     }
 
     /**
@@ -111,10 +136,14 @@ final class MemoryController extends AbstractMemoryController
      */
     public function destroy(Request $request): JsonResponse
     {
-        $principalId = $this->requestPrincipalId();
-        $memoryId = (string) $request->attributes->get('id', '');
+        try {
+            $principalId = $this->requestPrincipalId($request);
+            $memoryId = (string) $request->attributes->get('id', '');
 
-        $deleted = $this->memoryCommand->deleteGlobalMemory($memoryId, $principalId);
+            $deleted = $this->memoryCommand->deleteGlobalMemory($memoryId, $principalId);
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
+        }
 
         if (! $deleted) {
             return $this->notFound();
@@ -128,17 +157,21 @@ final class MemoryController extends AbstractMemoryController
      */
     public function reorder(Request $request): JsonResponse
     {
-        $principalId = $this->requestPrincipalId();
+        try {
+            $principalId = $this->requestPrincipalId($request);
 
-        $body = $this->decodeRequestBody($request);
-        if ($body instanceof JsonResponse) {
-            return $body;
+            $body = $this->decodeRequestBody($request);
+            if ($body instanceof JsonResponse) {
+                return $body;
+            }
+
+            return $this->runReorder(
+                $body['order'] ?? [],
+                fn(array $order) => $this->memoryCommand->reorderGlobalMemories($principalId, $order),
+            );
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         }
-
-        return $this->runReorder(
-            $body['order'] ?? [],
-            fn(array $order) => $this->memoryCommand->reorderGlobalMemories($principalId, $order),
-        );
     }
 
     private function runReplace(callable $operation): JsonResponse

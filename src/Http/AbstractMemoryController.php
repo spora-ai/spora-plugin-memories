@@ -13,6 +13,7 @@ use Spora\Plugins\Memories\Services\MemoryQueryInterface;
 use Spora\Plugins\Memories\Services\MemoryTypes;
 use Spora\Services\Exceptions\AgentNotFoundException;
 use Spora\Services\Exceptions\PrincipalMaterialisationException;
+use Spora\Services\Exceptions\PrincipalNotAccessibleException;
 use Spora\Services\PrincipalService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -51,15 +52,23 @@ abstract class AbstractMemoryController
      * through {@see \Spora\Services\PrincipalResolver::ownerUserId()} so
      * the visibility gate at
      * {@see \Spora\Services\PrincipalResolver::isVisibleTo()} expands to
-     * the user's full principal set. Re-throws
-     * {@see PrincipalMaterialisationException} verbatim instead of wrapping
-     * it in a generic RuntimeException so the HTTP layer can recognise
-     * the failure mode without parsing messages.
+     * the user's full principal set.
+     *
+     * The frontend's `PrincipalChipRow` lets the operator pick which
+     * principal to act as (their own user-principal or any group they
+     * belong to). The selection is sent as `?principal_id=N` on every
+     * request; if it's absent we fall back to the user principal so
+     * callers that don't know about the param keep working. When the
+     * principal id is present but the caller doesn't control it (e.g.
+     * forged by curl), {@see PrincipalNotAccessibleException} surfaces
+     * the rejection as a 403 rather than silently writing under the
+     * wrong scope.
      *
      * @throws NotAuthenticatedException When no user is logged in.
      * @throws PrincipalMaterialisationException When the principal row cannot be materialised.
+     * @throws PrincipalNotAccessibleException When `?principal_id=` names a principal the caller does not control.
      */
-    protected function requestPrincipalId(): int
+    protected function requestPrincipalId(Request $request): int
     {
         if ($this->resolvedPrincipalId !== null) {
             return $this->resolvedPrincipalId;
@@ -68,9 +77,48 @@ abstract class AbstractMemoryController
         if ($userId === null) {
             throw new NotAuthenticatedException('Authenticated user required');
         }
+
+        $requestedPrincipalId = self::extractPrincipalIdFromRequest($request);
+        if ($requestedPrincipalId !== null) {
+            // `visiblePrincipalIdsFor` is the right primitive here — it
+            // includes the caller's user-principal AND every group
+            // principal for groups the user belongs to (any role, not
+            // just owner/admin). That's what makes "select a group
+            // principal in the chip row" actually mean "manage the
+            // group's memories" for ordinary members, not just owners.
+            // `PrincipalService::callerControlsPrincipal` would be too
+            // restrictive — it's the admin gate on transfers and
+            // deletions, not the visibility gate.
+            if (! in_array($requestedPrincipalId, $this->principals->visiblePrincipalIdsFor($userId), true)) {
+                throw new PrincipalNotAccessibleException(
+                    "Caller does not control principal #{$requestedPrincipalId}.",
+                );
+            }
+            $this->resolvedPrincipalId = $requestedPrincipalId;
+            return $this->resolvedPrincipalId;
+        }
+
         $this->resolvedPrincipalId = (int) $this->principals->ensureUserPrincipal($userId)->id;
 
         return $this->resolvedPrincipalId;
+    }
+
+    /**
+     * Parse `?principal_id=` from the request bag into a positive int.
+     * Returns null when the parameter is absent or syntactically invalid
+     * so the caller can fall back to the user-principal silently.
+     */
+    private static function extractPrincipalIdFromRequest(Request $request): ?int
+    {
+        $raw = $request->query->get('principal_id');
+        // `query->get()` typically returns string (URL-encoded query)
+        // but Symfony's repeated-key de-dup yields an int for single-
+        // valued URL params. Accept either via numeric coercion.
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        $value = is_numeric($raw) ? (int) $raw : -1;
+        return $value > 0 ? $value : null;
     }
 
     /**
@@ -170,6 +218,8 @@ abstract class AbstractMemoryController
             return new JsonResponse(['data' => $result], Response::HTTP_CREATED);
         } catch (MemoryValidationException $e) {
             return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         } catch (AgentNotFoundException) {
             return $this->notFound();
         }
@@ -187,6 +237,8 @@ abstract class AbstractMemoryController
             $result = $operation();
         } catch (MemoryValidationException $e) {
             return $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         }
 
         if ($result === null) {
@@ -210,6 +262,8 @@ abstract class AbstractMemoryController
 
         try {
             $operation($order);
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         } catch (AgentNotFoundException) {
             return $this->notFound();
         }
@@ -227,6 +281,14 @@ abstract class AbstractMemoryController
         return new JsonResponse(
             ['error' => ['code' => 'NOT_FOUND', 'message' => 'Memory not found.']],
             Response::HTTP_NOT_FOUND,
+        );
+    }
+
+    protected function forbidden(string $message): JsonResponse
+    {
+        return new JsonResponse(
+            ['error' => ['code' => 'FORBIDDEN', 'message' => $message]],
+            Response::HTTP_FORBIDDEN,
         );
     }
 
@@ -264,6 +326,9 @@ abstract class AbstractMemoryController
                 $e->getMessage(),
                 Response::HTTP_UNPROCESSABLE_ENTITY,
             );
+        }
+        if ($e instanceof PrincipalNotAccessibleException) {
+            return $this->forbidden($e->getMessage());
         }
 
         return $this->notFound();
