@@ -103,30 +103,20 @@ function bootAuth(Spora\Auth\AuthService $authService, string $email = 'test@exa
 }
 
 /**
- * Materialise a user-principal row for the given user id and return the
- * principal id. spora-core migration 0067 made `agents.principal_id` NOT NULL
- * and dropped `agents.user_id`, so any test that builds an Agent through
- * `Agent::create()` must go through this helper to satisfy the FK.
+ * Materialise a user-principal row for the given user id via
+ * PrincipalService::ensureUserPrincipal and return the principal id.
+ * The memory service contract is anchored on principal_id (post-0067);
+ * the legacy `memories.user_id` column is gone, so every test that
+ * touches the memories service must go through this helper.
  *
- * Idempotent: returns the existing principal id when one already exists for
- * this user (e.g. when the same test fixture is materialised twice in the
- * same DB lifetime — the plugin tests boot a fresh in-memory SQLite per
- * beforeEach so this only matters when a fixture helper is called twice in
- * one test).
+ * Idempotent: returns the existing principal id when one already exists
+ * for this user.
  */
 function createUserPrincipal(int $userId): int
 {
-    $existing = Illuminate\Database\Capsule\Manager::table('principals')
-        ->where('type', 'user')->where('user_id', $userId)->value('id');
-    if ($existing !== null) {
-        return (int) $existing;
-    }
-    return (int) Illuminate\Database\Capsule\Manager::table('principals')->insertGetId([
-        'type'       => 'user',
-        'user_id'    => $userId,
-        'created_at' => date('Y-m-d H:i:s'),
-        'updated_at' => date('Y-m-d H:i:s'),
-    ]);
+    $service = new Spora\Services\PrincipalService(new Spora\Services\PrincipalResolver());
+
+    return (int) $service->ensureUserPrincipal($userId)->id;
 }
 
 /**

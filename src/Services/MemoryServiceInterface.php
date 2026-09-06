@@ -5,64 +5,13 @@ declare(strict_types=1);
 namespace Spora\Plugins\Memories\Services;
 
 /**
- * Contract for memory persistence (global and agent-scoped).
+ * Combined contract for memory persistence (principal-scoped global +
+ * agent-scoped). Spans {@see MemoryQueryInterface} (reads) and
+ * {@see MemoryCommandInterface} (writes), so callers can depend on the
+ * narrower interface for the methods they actually use.
  *
- * Implementations handle CRUD and reordering of key-value memories
- * that agents use to maintain context across task executions.
+ * Ownership is anchored on `principalId` for global memories (post-0067's
+ * principal model) and on `agentId` for agent memories (the agent
+ * travels with its memories through owner transfers).
  */
-interface MemoryServiceInterface
-{
-    /**
-     * @return list<array>
-     */
-    public function listGlobalMemories(int $userId): ?array;
-
-    /**
-     * @return list<array>
-     */
-    public function listAgentMemories(int $agentId, int $userId): ?array;
-
-    /**
-     * @return array|null
-     */
-    public function getGlobalMemory(int $memoryId, int $userId): ?array;
-
-    /**
-     * @return array|null
-     */
-    public function getAgentMemory(int $memoryId, int $agentId, int $userId): ?array;
-
-    /**
-     * @return array
-     */
-    public function createGlobalMemory(int $userId, array $data): array;
-
-    /**
-     * @return array
-     */
-    public function createAgentMemory(int $agentId, int $userId, array $data): array;
-
-    /**
-     * @return array|null
-     */
-    public function updateGlobalMemory(int $memoryId, int $userId, array $data): ?array;
-
-    /**
-     * @return array|null
-     */
-    public function updateAgentMemory(int $memoryId, int $agentId, int $userId, array $data): ?array;
-
-    public function deleteGlobalMemory(int $memoryId, int $userId): bool;
-
-    public function deleteAgentMemory(int $memoryId, int $agentId, int $userId): bool;
-
-    /**
-     * @param list<int> $orderedIds Memory IDs in desired display order
-     */
-    public function reorderGlobalMemories(int $userId, array $orderedIds): void;
-
-    /**
-     * @param list<int> $orderedIds Memory IDs in desired display order
-     */
-    public function reorderAgentMemories(int $agentId, int $userId, array $orderedIds): void;
-}
+interface MemoryServiceInterface extends MemoryQueryInterface, MemoryCommandInterface {}

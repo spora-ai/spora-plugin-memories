@@ -7,9 +7,11 @@ use Spora\Plugins\Memories\Http\AgentMemoryController;
 use Spora\Plugins\Memories\Http\MemoryController;
 use Spora\Plugins\Memories\MemoriesApp;
 use Spora\Plugins\Memories\MemoriesPlugin;
-use Spora\Plugins\Memories\Services\MemoryServiceInterface;
+use Spora\Plugins\Memories\Services\MemoryCommandInterface;
+use Spora\Plugins\Memories\Services\MemoryQueryInterface;
 use Spora\Plugins\Memories\Tools\AgentMemoryTool;
 use Spora\Plugins\Memories\Tools\GlobalMemoryTool;
+use Spora\Services\PrincipalService;
 
 it('advertises the plugin as the app\'s display name', function (): void {
     $plugin = new MemoriesPlugin();
@@ -43,10 +45,10 @@ it('lists AgentMemoryTool and GlobalMemoryTool via tools()', function (): void {
     expect($plugin->tools())->toContain(AgentMemoryTool::class, GlobalMemoryTool::class);
 });
 
-it('declares schema version 1 so the DatabaseSchemaInstaller picks up migrations', function (): void {
+it('declares schema version 2 so the DatabaseSchemaInstaller picks up the v2 migration', function (): void {
     $plugin = new MemoriesPlugin();
 
-    expect($plugin->schemaVersion())->toBe(1);
+    expect($plugin->schemaVersion())->toBe(2);
 });
 
 it('points migrationsPath() at the bundled database/migrations directory', function (): void {
@@ -56,12 +58,14 @@ it('points migrationsPath() at the bundled database/migrations directory', funct
         ->and(is_dir($plugin->migrationsPath()))->toBeTrue();
 });
 
-it('the migrations directory ships the slug-prefixed create-table migration', function (): void {
+it('the migrations directory ships both the create-table and v2 migrations', function (): void {
     $plugin = new MemoriesPlugin();
 
-    $files = glob($plugin->migrationsPath() . '/memories_000001_*.php') ?: [];
+    $v1 = glob($plugin->migrationsPath() . '/memories_000001_*.php') ?: [];
+    $v2 = glob($plugin->migrationsPath() . '/memories_000002_*.php') ?: [];
 
-    expect($files)->not->toBeEmpty();
+    expect($v1)->not->toBeEmpty()
+        ->and($v2)->not->toBeEmpty();
 });
 
 it('ships an agent template at agent-templates/assistant.json', function (): void {
@@ -81,7 +85,7 @@ it('MemoriesApp satisfies VueAppInterface contract (name + entry)', function ():
         ->and($app->entry())->toBe('main.js');
 });
 
-it('register() wires MemoryServiceInterface -> MemoryService autowire', function (): void {
+it('register() wires the two service interfaces to their concrete implementations', function (): void {
     $builder = new ContainerBuilder();
     $builder->useAutowiring(true);
 
@@ -89,7 +93,9 @@ it('register() wires MemoryServiceInterface -> MemoryService autowire', function
 
     $container = $builder->build();
 
-    expect($container->has(MemoryServiceInterface::class))->toBeTrue();
-    expect($container->has(MemoryController::class))->toBeTrue();
-    expect($container->has(AgentMemoryController::class))->toBeTrue();
+    expect($container->has(MemoryQueryInterface::class))->toBeTrue()
+        ->and($container->has(MemoryCommandInterface::class))->toBeTrue()
+        ->and($container->has(MemoryController::class))->toBeTrue()
+        ->and($container->has(AgentMemoryController::class))->toBeTrue()
+        ->and($container->has(PrincipalService::class))->toBeTrue();
 });

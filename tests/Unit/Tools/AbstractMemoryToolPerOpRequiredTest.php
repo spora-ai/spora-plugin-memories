@@ -31,8 +31,8 @@ function abstractMemoryToolParameterArgs(string $name): array
     throw new RuntimeException("ToolParameter '{$name}' not declared on " . AbstractMemoryTool::class);
 }
 
-it('binds name to get, save, delete', function () {
-    $expected = ['get', 'save', 'delete'];
+it('binds name to get, save, delete, replace', function () {
+    $expected = ['get', 'save', 'delete', 'replace'];
     sort($expected);
     $actual = abstractMemoryToolParameterArgs('name')['required'];
     sort($actual);
@@ -41,4 +41,17 @@ it('binds name to get, save, delete', function () {
 
 it('binds content to save only', function () {
     expect(abstractMemoryToolParameterArgs('content')['required'])->toBe(['save']);
+});
+
+it('binds type to save, replace, get', function () {
+    $expected = ['save', 'replace', 'get'];
+    sort($expected);
+    $actual = abstractMemoryToolParameterArgs('type')['required'];
+    sort($actual);
+    expect($actual)->toBe($expected);
+});
+
+it('binds find and new_text to replace only', function () {
+    expect(abstractMemoryToolParameterArgs('find')['required'])->toBe(['replace']);
+    expect(abstractMemoryToolParameterArgs('new_text')['required'])->toBe(['replace']);
 });

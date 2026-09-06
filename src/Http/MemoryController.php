@@ -4,34 +4,39 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Memories\Http;
 
-use JsonException;
-use RuntimeException;
-use Spora\Auth\AuthService;
-use Spora\Plugins\Memories\Services\MemoryServiceInterface;
+use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
+use Spora\Services\Exceptions\AgentNotFoundException;
+use Spora\Services\Exceptions\PrincipalNotAccessibleException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Handles global (user-scoped) memory CRUD and reordering.
+ * Handles principal-scoped (formerly user-scoped) memory CRUD, reordering,
+ * and surgical substring replacement.
+ *
+ * The principal id is resolved once per request via
+ * {@see AbstractMemoryController::requestPrincipalId()} — mirroring how
+ * the typst and media-archive plugins anchor writes to a principal.
+ * When the frontend's `PrincipalChipRow` is on a group principal, the
+ * caller sends `?principal_id=<group>` on every request; the resolver
+ * honours it when the caller controls it (i.e. is `admin`/`owner` of
+ * the group) and 403s otherwise.
  */
-final class MemoryController
+final class MemoryController extends AbstractMemoryController
 {
-    private const ERR_INVALID_JSON_MESSAGE = 'Request body must be valid JSON.';
-
-    public function __construct(
-        private readonly AuthService $authService,
-        private readonly MemoryServiceInterface $memoryService,
-    ) {}
-
     /**
      * GET /api/v1/memories
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $userId = $this->authService->currentUserId();
+        try {
+            $principalId = $this->requestPrincipalId($request);
+            $type = $request->query->get('type');
 
-        $memories = $this->memoryService->listGlobalMemories($userId);
+            $memories = $this->memoryQuery->listGlobalMemories($principalId, is_string($type) && $type !== '' ? $type : null);
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
+        }
 
         return new JsonResponse(['data' => ['memories' => $memories]]);
     }
@@ -41,27 +46,19 @@ final class MemoryController
      */
     public function store(Request $request): JsonResponse
     {
-        $userId = $this->authService->currentUserId();
-
         try {
-            $body = $this->decodeJson($request);
-        } catch (JsonException) {
-            return $this->error('INVALID_JSON', self::ERR_INVALID_JSON_MESSAGE, Response::HTTP_BAD_REQUEST);
-        }
+            $principalId = $this->requestPrincipalId($request);
 
-        $name = trim((string) ($body['name'] ?? ''));
-        if ($name === '') {
-            return $this->error('VALIDATION_ERROR', 'name is required.', Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
+            $body = $this->decodeRequestBody($request);
+            if ($body instanceof JsonResponse) {
+                return $body;
+            }
 
-        try {
-            $result = $this->memoryService->createGlobalMemory($userId, $body);
-            $response = new JsonResponse(['data' => $result], Response::HTTP_CREATED);
-        } catch (RuntimeException $e) {
-            $response = $this->error('VALIDATION_ERROR', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+            $validationError = $this->validateCreateInput($body);
+            return $validationError ?? $this->runCreate(fn() => $this->memoryCommand->createGlobalMemory($principalId, $body));
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         }
-
-        return $response;
     }
 
     /**
@@ -69,16 +66,16 @@ final class MemoryController
      */
     public function show(Request $request): JsonResponse
     {
-        $userId = $this->authService->currentUserId();
-        $memoryId = (int) $request->attributes->get('id', 0);
+        try {
+            $principalId = $this->requestPrincipalId($request);
+            $memoryId = (string) $request->attributes->get('id', '');
 
-        $result = $this->memoryService->getGlobalMemory($memoryId, $userId);
-
-        if ($result === null) {
-            return $this->notFound();
+            $result = $this->memoryQuery->getGlobalMemory($memoryId, $principalId);
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         }
 
-        return new JsonResponse(['data' => $result]);
+        return $result === null ? $this->notFound() : new JsonResponse(['data' => $result]);
     }
 
     /**
@@ -86,22 +83,40 @@ final class MemoryController
      */
     public function update(Request $request): JsonResponse
     {
-        $userId = $this->authService->currentUserId();
-        $memoryId = (int) $request->attributes->get('id', 0);
-
         try {
-            $body = $this->decodeJson($request);
-        } catch (JsonException) {
-            return $this->error('INVALID_JSON', self::ERR_INVALID_JSON_MESSAGE, Response::HTTP_BAD_REQUEST);
+            $principalId = $this->requestPrincipalId($request);
+            $memoryId = (string) $request->attributes->get('id', '');
+
+            $body = $this->decodeRequestBody($request);
+            if ($body instanceof JsonResponse) {
+                return $body;
+            }
+
+            return $this->runUpdate(fn() => $this->memoryCommand->updateGlobalMemory($memoryId, $principalId, $body));
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         }
+    }
 
-        $result = $this->memoryService->updateGlobalMemory($memoryId, $userId, $body);
+    /**
+     * POST /api/v1/memories/{id}/replace
+     */
+    public function replace(Request $request): JsonResponse
+    {
+        try {
+            $principalId = $this->requestPrincipalId($request);
+            $memoryId = (string) $request->attributes->get('id', '');
 
-        if ($result === null) {
-            return $this->notFound();
+            $body = $this->decodeRequestBody($request);
+            if ($body instanceof JsonResponse) {
+                return $body;
+            }
+
+            $validationError = $this->validateReplaceInput($body);
+            return $validationError ?? $this->runReplace(fn() => $this->memoryCommand->replaceGlobalMemory($memoryId, $principalId, $body));
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         }
-
-        return new JsonResponse(['data' => $result]);
     }
 
     /**
@@ -109,16 +124,16 @@ final class MemoryController
      */
     public function destroy(Request $request): JsonResponse
     {
-        $userId = $this->authService->currentUserId();
-        $memoryId = (int) $request->attributes->get('id', 0);
+        try {
+            $principalId = $this->requestPrincipalId($request);
+            $memoryId = (string) $request->attributes->get('id', '');
 
-        $deleted = $this->memoryService->deleteGlobalMemory($memoryId, $userId);
-
-        if (! $deleted) {
-            return $this->notFound();
+            $deleted = $this->memoryCommand->deleteGlobalMemory($memoryId, $principalId);
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         }
 
-        return new JsonResponse(['data' => ['deleted' => true]]);
+        return $deleted ? new JsonResponse(['data' => ['deleted' => true]]) : $this->notFound();
     }
 
     /**
@@ -126,44 +141,29 @@ final class MemoryController
      */
     public function reorder(Request $request): JsonResponse
     {
-        $userId = $this->authService->currentUserId();
-
         try {
-            $body = $this->decodeJson($request);
-        } catch (JsonException) {
-            return $this->error('INVALID_JSON', self::ERR_INVALID_JSON_MESSAGE, Response::HTTP_BAD_REQUEST);
+            $principalId = $this->requestPrincipalId($request);
+
+            $body = $this->decodeRequestBody($request);
+            if ($body instanceof JsonResponse) {
+                return $body;
+            }
+
+            return $this->runReorder(
+                $body['order'] ?? [],
+                fn(array $order) => $this->memoryCommand->reorderGlobalMemories($principalId, $order),
+            );
+        } catch (PrincipalNotAccessibleException $e) {
+            return $this->forbidden($e->getMessage());
         }
-
-        $order = $body['order'] ?? [];
-        if (! is_array($order)) {
-            return $this->error('VALIDATION_ERROR', 'order must be an array of memory IDs.', Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-
-        $this->memoryService->reorderGlobalMemories($userId, array_values($order));
-
-        return new JsonResponse(['data' => ['success' => true]]);
     }
 
-    private function decodeJson(Request $request): array
+    private function runReplace(callable $operation): JsonResponse
     {
-        $content = $request->getContent();
-        if ($content === '') {
-            return [];
+        try {
+            return $this->replaceResponse($operation());
+        } catch (MemoryValidationException | AgentNotFoundException $e) {
+            return $this->replaceResponse(null, $e);
         }
-
-        return json_decode($content, true, 512, JSON_THROW_ON_ERROR);
-    }
-
-    private function error(string $code, string $message, int $status): JsonResponse
-    {
-        return new JsonResponse(['error' => ['code' => $code, 'message' => $message]], $status);
-    }
-
-    private function notFound(): JsonResponse
-    {
-        return new JsonResponse(
-            ['error' => ['code' => 'NOT_FOUND', 'message' => 'Memory not found.']],
-            Response::HTTP_NOT_FOUND,
-        );
     }
 }
