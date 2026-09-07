@@ -14,15 +14,17 @@ namespace Spora\Plugins\Memories\Services;
  * domain enums and error-code constants were lifted into
  * {@see MemoryTypes} so callers don't have to qualify a service class.
  *
- * This class remains as a one-release deprecation alias — external
- * code that still references `MemoryService::TYPE_NOT_ALLOWED_CODE` (or
- * any of the other constants) keeps compiling. The class is final and
- * carries no methods so it doesn't trigger the per-class method-count
- * ceiling; the actual work has moved out to the two new services.
+ * This class remains as a one-release compat shim that ships with
+ * 0.3.0 — external code that still references
+ * `MemoryService::TYPE_NOT_ALLOWED_CODE` (or any of the other
+ * constants) keeps compiling through this version. The class is final
+ * and carries no methods so it doesn't trigger the per-class
+ * method-count ceiling; the actual work has moved out to the two new
+ * services. Removal is targeted for 0.4.0.
  *
  * @deprecated since 0.2.0 — use {@see MemoryTypes} for constants,
  *             {@see MemoryQueryService} / {@see MemoryCommandService}
- *             for the implementations. Will be removed in 0.3.0.
+ *             for the implementations. Will be removed in 0.4.0.
  */
 final class MemoryService
 {

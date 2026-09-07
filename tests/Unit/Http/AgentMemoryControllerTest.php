@@ -46,8 +46,8 @@ function createAgentMemUser(AuthService $authService, string $email): array
 describe('AgentMemoryController::index', function (): void {
     test('returns 200 with memories for an existing agent', function (): void {
         [$controller, $authService, , $service] = makeAgentMemController();
-        [, $agentId, $principalId] = createAgentMemUser($authService, 'index@example.com');
-        $service->createAgentMemory($agentId, $principalId, ['name' => 'M1', 'type' => 'context', 'content' => 'x']);
+        [$userId, $agentId, $principalId] = createAgentMemUser($authService, 'index@example.com');
+        $service->createAgentMemory($agentId, $userId, $principalId, ['name' => 'M1', 'type' => 'context', 'content' => 'x']);
 
         $request = new Request();
         $request->attributes->set('agentId', $agentId);
@@ -71,9 +71,9 @@ describe('AgentMemoryController::index', function (): void {
 
     test('forwards the ?type filter to the service', function (): void {
         [$controller, $authService, , $service] = makeAgentMemController();
-        [, $agentId, $principalId] = createAgentMemUser($authService, 'indextype@example.com');
-        $service->createAgentMemory($agentId, $principalId, ['name' => 'plan_one', 'type' => 'plan', 'content' => 'p']);
-        $service->createAgentMemory($agentId, $principalId, ['name' => 'ctx_one', 'type' => 'context', 'content' => 'c']);
+        [$userId, $agentId, $principalId] = createAgentMemUser($authService, 'indextype@example.com');
+        $service->createAgentMemory($agentId, $userId, $principalId, ['name' => 'plan_one', 'type' => 'plan', 'content' => 'p']);
+        $service->createAgentMemory($agentId, $userId, $principalId, ['name' => 'ctx_one', 'type' => 'context', 'content' => 'c']);
 
         $request = Request::create('/api/v1/agents/' . $agentId . '/memories', 'GET', ['type' => 'plan']);
         $request->attributes->set('agentId', $agentId);
@@ -158,8 +158,8 @@ describe('AgentMemoryController::store', function (): void {
 describe('AgentMemoryController::show', function (): void {
     test('returns 200 with the memory', function (): void {
         [$controller, $authService, , $service] = makeAgentMemController();
-        [, $agentId, $principalId] = createAgentMemUser($authService, 'show@example.com');
-        $created = $service->createAgentMemory($agentId, $principalId, ['name' => 'M', 'type' => 'context', 'content' => 'c']);
+        [$userId, $agentId, $principalId] = createAgentMemUser($authService, 'show@example.com');
+        $created = $service->createAgentMemory($agentId, $userId, $principalId, ['name' => 'M', 'type' => 'context', 'content' => 'c']);
 
         $request = new Request();
         $request->attributes->set('agentId', $agentId);
@@ -184,8 +184,8 @@ describe('AgentMemoryController::show', function (): void {
 describe('AgentMemoryController::update', function (): void {
     test('returns 200 with the updated memory', function (): void {
         [$controller, $authService, , $service] = makeAgentMemController();
-        [, $agentId, $principalId] = createAgentMemUser($authService, 'update@example.com');
-        $created = $service->createAgentMemory($agentId, $principalId, ['name' => 'Old', 'type' => 'context', 'content' => 'c']);
+        [$userId, $agentId, $principalId] = createAgentMemUser($authService, 'update@example.com');
+        $created = $service->createAgentMemory($agentId, $userId, $principalId, ['name' => 'Old', 'type' => 'context', 'content' => 'c']);
 
         $request = jsonRequest('PUT', "/api/v1/agents/{$agentId}/memories/{$created['memory']['id']}", ['name' => 'New', 'type' => 'context', 'content' => 'c2']);
         $request->attributes->set('agentId', $agentId);
@@ -225,8 +225,8 @@ describe('AgentMemoryController::update', function (): void {
 describe('AgentMemoryController::replace', function (): void {
     test('returns 200 on a unique-substring replace', function (): void {
         [$controller, $authService, , $service] = makeAgentMemController();
-        [, $agentId, $principalId] = createAgentMemUser($authService, 'replace@example.com');
-        $created = $service->createAgentMemory($agentId, $principalId, ['name' => 'sprint', 'type' => 'plan', 'content' => 'TODO: ship auth, write tests']);
+        [$userId, $agentId, $principalId] = createAgentMemUser($authService, 'replace@example.com');
+        $created = $service->createAgentMemory($agentId, $userId, $principalId, ['name' => 'sprint', 'type' => 'plan', 'content' => 'TODO: ship auth, write tests']);
 
         $request = jsonRequest('POST', "/api/v1/agents/{$agentId}/memories/{$created['memory']['id']}/replace", [
             'name' => 'sprint', 'type' => 'plan',
@@ -243,8 +243,8 @@ describe('AgentMemoryController::replace', function (): void {
 
     test('returns 422 REPLACE_NOT_UNIQUE on multiple matches', function (): void {
         [$controller, $authService, , $service] = makeAgentMemController();
-        [, $agentId, $principalId] = createAgentMemUser($authService, 'replaceamb@example.com');
-        $created = $service->createAgentMemory($agentId, $principalId, ['name' => 'sprint', 'type' => 'plan', 'content' => 'foo foo foo']);
+        [$userId, $agentId, $principalId] = createAgentMemUser($authService, 'replaceamb@example.com');
+        $created = $service->createAgentMemory($agentId, $userId, $principalId, ['name' => 'sprint', 'type' => 'plan', 'content' => 'foo foo foo']);
 
         $request = jsonRequest('POST', "/api/v1/agents/{$agentId}/memories/{$created['memory']['id']}/replace", [
             'name' => 'sprint', 'type' => 'plan',
@@ -295,8 +295,8 @@ describe('AgentMemoryController::replace', function (): void {
 describe('AgentMemoryController::destroy', function (): void {
     test('returns 200 with deleted: true on success', function (): void {
         [$controller, $authService, , $service] = makeAgentMemController();
-        [, $agentId, $principalId] = createAgentMemUser($authService, 'destroy@example.com');
-        $created = $service->createAgentMemory($agentId, $principalId, ['name' => 'X', 'type' => 'context', 'content' => 'c']);
+        [$userId, $agentId, $principalId] = createAgentMemUser($authService, 'destroy@example.com');
+        $created = $service->createAgentMemory($agentId, $userId, $principalId, ['name' => 'X', 'type' => 'context', 'content' => 'c']);
 
         $request = new Request();
         $request->attributes->set('agentId', $agentId);
@@ -324,9 +324,9 @@ describe('AgentMemoryController::destroy', function (): void {
 describe('AgentMemoryController::reorder', function (): void {
     test('returns 200 with success: true on valid order', function (): void {
         [$controller, $authService, , $service] = makeAgentMemController();
-        [, $agentId, $principalId] = createAgentMemUser($authService, 'reorder@example.com');
-        $a = $service->createAgentMemory($agentId, $principalId, ['name' => 'A', 'type' => 'context', 'content' => 'a']);
-        $b = $service->createAgentMemory($agentId, $principalId, ['name' => 'B', 'type' => 'context', 'content' => 'b']);
+        [$userId, $agentId, $principalId] = createAgentMemUser($authService, 'reorder@example.com');
+        $a = $service->createAgentMemory($agentId, $userId, $principalId, ['name' => 'A', 'type' => 'context', 'content' => 'a']);
+        $b = $service->createAgentMemory($agentId, $userId, $principalId, ['name' => 'B', 'type' => 'context', 'content' => 'b']);
 
         $request = jsonRequest('PATCH', "/api/v1/agents/{$agentId}/memories/reorder", ['order' => [$b['memory']['id'], $a['memory']['id']]]);
         $request->attributes->set('agentId', $agentId);

@@ -77,8 +77,15 @@ final class Memory extends Model
     ];
 
     /**
-     * UUIDv7 (time-ordered) instead of the trait's default v4.
-     * Returned to HasUuids via its internal `newUniqueId()` resolution.
+     * UUIDv7 (time-ordered). Returned to HasUuids via its internal
+     * `newUniqueId()` resolution.
+     *
+     * Forward-compat pin: Laravel 13.x's {@see HasUuids::newUniqueId()}
+     * already returns `(string) Str::uuid7()`, so this override is
+     * technically redundant on the current dep. Kept as an explicit pin
+     * in case a future trait bump flips the default back to v4 (or
+     * shifts to v8) — the plugin's editorial workflows depend on v7's
+     * chronological ordering.
      */
     public function newUniqueId(): string
     {

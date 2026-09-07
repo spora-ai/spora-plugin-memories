@@ -161,19 +161,19 @@ describe('listGlobalMemories', function (): void {
 describe('listAgentMemories', function (): void {
 
     it(IT_AGENT_NOT_FOUND, function (): void {
-        [, , $principalId] = createUserWithAgent();
+        [$userId, , ] = createUserWithAgent();
         $service = makeMemoryQueryService();
 
-        $result = $service->listAgentMemories(9999, $principalId);
+        $result = $service->listAgentMemories(9999, $userId);
 
         expect($result)->toBeNull();
     });
 
     it('returns empty array when no agent memories exist', function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, ] = createUserWithAgent();
         $service = makeMemoryQueryService();
 
-        $result = $service->listAgentMemories($agentId, $principalId);
+        $result = $service->listAgentMemories($agentId, $userId);
 
         expect($result)->toBeArray()
             ->and($result)->toBeEmpty();
@@ -187,7 +187,7 @@ describe('listAgentMemories', function (): void {
         Memory::create(['principal_id' => $principalId, 'agent_id' => $agentId1, 'scope' => 'agent', 'type' => 'context', 'name' => 'memory_for_agent1']);
         Memory::create(['principal_id' => $principalId, 'agent_id' => $agentId2, 'scope' => 'agent', 'type' => 'context', 'name' => 'memory_for_agent2']);
 
-        $result = $service->listAgentMemories($agentId1, $principalId);
+        $result = $service->listAgentMemories($agentId1, $userId);
 
         expect($result)->toHaveCount(1)
             ->and($result[0]['name'])->toBe('memory_for_agent1');
@@ -200,7 +200,7 @@ describe('listAgentMemories', function (): void {
         Memory::create(['principal_id' => $principalId, 'agent_id' => $agentId, 'scope' => 'agent', 'type' => 'plan', 'name' => 'plan_one']);
         Memory::create(['principal_id' => $principalId, 'agent_id' => $agentId, 'scope' => 'agent', 'type' => 'context', 'name' => 'ctx_one']);
 
-        $plans = $service->listAgentMemories($agentId, $principalId, 'plan');
+        $plans = $service->listAgentMemories($agentId, $userId, 'plan');
 
         expect($plans)->toHaveCount(1)
             ->and($plans[0]['name'])->toBe('plan_one');
@@ -293,18 +293,18 @@ describe('createGlobalMemory', function (): void {
 describe('createAgentMemory', function (): void {
 
     it('throws when agent does not exist', function (): void {
-        [, , $principalId] = createUserWithAgent();
+        [$userId, , $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
-        expect(fn() => $service->createAgentMemory(9999, $principalId, ['name' => 'test', 'type' => 'context']))
+        expect(fn() => $service->createAgentMemory(9999, $userId, $principalId, ['name' => 'test', 'type' => 'context']))
             ->toThrow(RuntimeException::class, 'Agent not found');
     });
 
     it('creates an agent-scoped memory and auto-assigns order', function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
-        $result = $service->createAgentMemory($agentId, $principalId, [
+        $result = $service->createAgentMemory($agentId, $userId, $principalId, [
             'name'    => 'agent_memory',
             'type'    => 'context',
             'content' => 'Agent-specific content',
@@ -394,19 +394,19 @@ describe('getGlobalMemory', function (): void {
 describe('getAgentMemory', function (): void {
 
     it(IT_AGENT_NOT_FOUND, function (): void {
-        [, , $principalId] = createUserWithAgent();
+        [$userId, , ] = createUserWithAgent();
         $service = makeMemoryQueryService();
 
-        $result = $service->getAgentMemory('00000000-0000-4000-8000-000000000000', 9999, $principalId);
+        $result = $service->getAgentMemory('00000000-0000-4000-8000-000000000000', 9999, $userId);
 
         expect($result)->toBeNull();
     });
 
     it(IT_MEMORY_NOT_FOUND, function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, ] = createUserWithAgent();
         $service = makeMemoryQueryService();
 
-        $result = $service->getAgentMemory('00000000-0000-4000-8000-000000000000', $agentId, $principalId);
+        $result = $service->getAgentMemory('00000000-0000-4000-8000-000000000000', $agentId, $userId);
 
         expect($result)->toBeNull();
     });
@@ -424,13 +424,13 @@ describe('getAgentMemory', function (): void {
             'name'         => 'agent1_only',
         ]);
 
-        $result = $service->getAgentMemory((string) $memory->id, $agentId2, $principalId);
+        $result = $service->getAgentMemory((string) $memory->id, $agentId2, $userId);
 
         expect($result)->toBeNull();
     });
 
     it('returns the memory when found', function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, $principalId] = createUserWithAgent();
         $service = makeMemoryQueryService();
 
         $memory = Memory::create([
@@ -441,7 +441,7 @@ describe('getAgentMemory', function (): void {
             'name'         => 'agent_findable',
         ]);
 
-        $result = $service->getAgentMemory((string) $memory->id, $agentId, $principalId);
+        $result = $service->getAgentMemory((string) $memory->id, $agentId, $userId);
 
         expect($result)->not->toBeNull()
             ->and($result['memory']['name'])->toBe('agent_findable');
@@ -575,26 +575,25 @@ describe('updateGlobalMemory', function (): void {
 
 describe('updateAgentMemory', function (): void {
 
-    it(IT_AGENT_NOT_FOUND, function (): void {
-        [, , $principalId] = createUserWithAgent();
+    it('throws when agent does not exist', function (): void {
+        [$userId, , $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
-        $result = $service->updateAgentMemory('00000000-0000-4000-8000-000000000000', 9999, $principalId, ['name' => 'new']);
-
-        expect($result)->toBeNull();
+        expect(fn() => $service->updateAgentMemory('00000000-0000-4000-8000-000000000000', 9999, $userId, $principalId, ['name' => 'new']))
+            ->toThrow(RuntimeException::class, 'Agent not found');
     });
 
     it(IT_MEMORY_NOT_FOUND, function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
-        $result = $service->updateAgentMemory('00000000-0000-4000-8000-000000000000', $agentId, $principalId, ['name' => 'new']);
+        $result = $service->updateAgentMemory('00000000-0000-4000-8000-000000000000', $agentId, $userId, $principalId, ['name' => 'new']);
 
         expect($result)->toBeNull();
     });
 
     it('updates agent memory', function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
         $memory = Memory::create([
@@ -606,7 +605,7 @@ describe('updateAgentMemory', function (): void {
             'content'      => 'Original',
         ]);
 
-        $result = $service->updateAgentMemory((string) $memory->id, $agentId, $principalId, [
+        $result = $service->updateAgentMemory((string) $memory->id, $agentId, $userId, $principalId, [
             'content' => 'Updated',
             'order'   => 10,
         ]);
@@ -684,22 +683,20 @@ describe('replaceGlobalMemory', function (): void {
 
 describe('replaceAgentMemory', function (): void {
 
-    it('returns null when agent does not exist', function (): void {
-        [, , $principalId] = createUserWithAgent();
+    it('throws when agent does not exist', function (): void {
+        [$userId, , $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
-        $result = $service->replaceAgentMemory('00000000-0000-4000-8000-000000000000', 9999, $principalId, [
+        expect(fn() => $service->replaceAgentMemory('00000000-0000-4000-8000-000000000000', 9999, $userId, $principalId, [
             'find' => 'a', 'new_text' => 'b',
-        ]);
-
-        expect($result)->toBeNull();
+        ]))->toThrow(RuntimeException::class, 'Agent not found');
     });
 
     it('returns null when memory does not exist', function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
-        $result = $service->replaceAgentMemory('00000000-0000-4000-8000-000000000000', $agentId, $principalId, [
+        $result = $service->replaceAgentMemory('00000000-0000-4000-8000-000000000000', $agentId, $userId, $principalId, [
             'find' => 'a', 'new_text' => 'b',
         ]);
 
@@ -707,7 +704,7 @@ describe('replaceAgentMemory', function (): void {
     });
 
     it('replaces a unique occurrence and persists the result', function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
         $memory = Memory::create([
@@ -719,7 +716,7 @@ describe('replaceAgentMemory', function (): void {
             'content'      => 'TODO:\n- ship auth\n- write tests\n',
         ]);
 
-        $result = $service->replaceAgentMemory((string) $memory->id, $agentId, $principalId, [
+        $result = $service->replaceAgentMemory((string) $memory->id, $agentId, $userId, $principalId, [
             'find' => 'write tests',
             'new_text' => 'write tests (done)',
         ]);
@@ -862,20 +859,19 @@ describe('deleteGlobalMemory', function (): void {
 
 describe('deleteAgentMemory', function (): void {
 
-    it('returns false when agent does not exist', function (): void {
-        [, , $principalId] = createUserWithAgent();
+    it('throws when agent does not exist', function (): void {
+        [$userId, , $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
-        $result = $service->deleteAgentMemory('00000000-0000-4000-8000-000000000000', 9999, $principalId);
-
-        expect($result)->toBeFalse();
+        expect(fn() => $service->deleteAgentMemory('00000000-0000-4000-8000-000000000000', 9999, $userId, $principalId))
+            ->toThrow(RuntimeException::class, 'Agent not found');
     });
 
     it('returns false when memory does not exist', function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
-        $result = $service->deleteAgentMemory('00000000-0000-4000-8000-000000000000', $agentId, $principalId);
+        $result = $service->deleteAgentMemory('00000000-0000-4000-8000-000000000000', $agentId, $userId, $principalId);
 
         expect($result)->toBeFalse();
     });
@@ -893,14 +889,14 @@ describe('deleteAgentMemory', function (): void {
             'name'         => 'agent1_only',
         ]);
 
-        $result = $service->deleteAgentMemory((string) $memory->id, $agentId2, $principalId);
+        $result = $service->deleteAgentMemory((string) $memory->id, $agentId2, $userId, $principalId);
 
         expect($result)->toBeFalse()
             ->and(Memory::find($memory->id))->not->toBeNull();
     });
 
     it('deletes the agent memory and returns true', function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
         $memory = Memory::create([
@@ -911,7 +907,7 @@ describe('deleteAgentMemory', function (): void {
             'name'         => 'agent_to_delete',
         ]);
 
-        $result = $service->deleteAgentMemory((string) $memory->id, $agentId, $principalId);
+        $result = $service->deleteAgentMemory((string) $memory->id, $agentId, $userId, $principalId);
 
         expect($result)->toBeTrue()
             ->and(Memory::find($memory->id))->toBeNull();
@@ -938,13 +934,13 @@ describe('createGlobalMemory auto-assigns order', function (): void {
     });
 
     it('orders global memories independently from agent memories', function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
         $g1 = $service->createGlobalMemory($principalId, ['name' => 'global_first', 'type' => 'context']);
-        $a1 = $service->createAgentMemory($agentId, $principalId, ['name' => 'agent_first', 'type' => 'context']);
+        $a1 = $service->createAgentMemory($agentId, $userId, $principalId, ['name' => 'agent_first', 'type' => 'context']);
         $g2 = $service->createGlobalMemory($principalId, ['name' => 'global_second', 'type' => 'context']);
-        $a2 = $service->createAgentMemory($agentId, $principalId, ['name' => 'agent_second', 'type' => 'context']);
+        $a2 = $service->createAgentMemory($agentId, $userId, $principalId, ['name' => 'agent_second', 'type' => 'context']);
 
         expect($g1['memory']['order'])->toBe(1);
         expect($g2['memory']['order'])->toBe(2);
@@ -957,9 +953,9 @@ describe('createGlobalMemory auto-assigns order', function (): void {
         $agentId2 = createAgentWithPrincipal($userId, AGENT2_NAME, ['max_steps' => 10]);
         $service = makeMemoryService();
 
-        $a1 = $service->createAgentMemory($agentId1, $principalId, ['name' => 'agent1_first', 'type' => 'context']);
-        $a2 = $service->createAgentMemory($agentId2, $principalId, ['name' => 'agent2_first', 'type' => 'context']);
-        $a1b = $service->createAgentMemory($agentId1, $principalId, ['name' => 'agent1_second', 'type' => 'context']);
+        $a1 = $service->createAgentMemory($agentId1, $userId, $principalId, ['name' => 'agent1_first', 'type' => 'context']);
+        $a2 = $service->createAgentMemory($agentId2, $userId, $principalId, ['name' => 'agent2_first', 'type' => 'context']);
+        $a1b = $service->createAgentMemory($agentId1, $userId, $principalId, ['name' => 'agent1_second', 'type' => 'context']);
 
         expect($a1['memory']['order'])->toBe(1);
         expect($a2['memory']['order'])->toBe(1);
@@ -1016,25 +1012,25 @@ describe('reorderAgentMemories', function (): void {
         $command = makeMemoryService();
         $query = makeMemoryQueryService();
 
-        $a1 = $command->createAgentMemory($agentId1, $principalId, ['name' => 'a1_first', 'type' => 'context']);
-        $a2 = $command->createAgentMemory($agentId2, $principalId, ['name' => 'a2_first', 'type' => 'context']);
-        $a1b = $command->createAgentMemory($agentId1, $principalId, ['name' => 'a1_second', 'type' => 'context']);
+        $a1 = $command->createAgentMemory($agentId1, $userId, $principalId, ['name' => 'a1_first', 'type' => 'context']);
+        $a2 = $command->createAgentMemory($agentId2, $userId, $principalId, ['name' => 'a2_first', 'type' => 'context']);
+        $a1b = $command->createAgentMemory($agentId1, $userId, $principalId, ['name' => 'a1_second', 'type' => 'context']);
 
-        $command->reorderAgentMemories($agentId1, $principalId, [$a1b['memory']['id'], $a1['memory']['id']]);
+        $command->reorderAgentMemories($agentId1, $userId, $principalId, [$a1b['memory']['id'], $a1['memory']['id']]);
 
-        $result = $query->listAgentMemories($agentId1, $principalId);
+        $result = $query->listAgentMemories($agentId1, $userId);
         expect(array_column($result, 'id'))->toBe([$a1b['memory']['id'], $a1['memory']['id']]);
 
-        $result2 = $query->listAgentMemories($agentId2, $principalId);
+        $result2 = $query->listAgentMemories($agentId2, $userId);
         expect($result2[0]['id'])->toBe($a2['memory']['id'])
             ->and($result2[0]['order'])->toBe(1);
     });
 
     it('throws when agent does not exist', function (): void {
-        [, , $principalId] = createUserWithAgent();
+        [$userId, , $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
-        expect(fn() => $service->reorderAgentMemories(9999, $principalId, []))
+        expect(fn() => $service->reorderAgentMemories(9999, $userId, $principalId, []))
             ->toThrow(RuntimeException::class, 'Agent not found');
     });
 });
@@ -1046,10 +1042,10 @@ describe('reorderAgentMemories', function (): void {
 describe('resource transformation', function (): void {
 
     it('includes all expected fields in resource output', function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
-        $result = $service->createAgentMemory($agentId, $principalId, [
+        $result = $service->createAgentMemory($agentId, $userId, $principalId, [
             'name'    => 'resource_test',
             'type'    => 'examples',
             'summary' => 'Test summary',
@@ -1078,12 +1074,12 @@ describe('resource transformation', function (): void {
 describe('UTF-8 sanitization on write', function (): void {
 
     it('createAgentMemory persists a clean UTF-8 content with Latin-1 bytes scrubbed', function (): void {
-        [, $agentId, $principalId] = createUserWithAgent();
+        [$userId, $agentId, $principalId] = createUserWithAgent();
         $service = makeMemoryService();
 
         // 0xE9 / 0xFC are valid Windows-1252; the sanitizer salvages them as UTF-8.
         $dirty = 'café' . chr(0xE9) . chr(0xFC) . '!';
-        $result = $service->createAgentMemory($agentId, $principalId, [
+        $result = $service->createAgentMemory($agentId, $userId, $principalId, [
             'name'    => 'utf8_test',
             'type'    => 'context',
             'content' => $dirty,

@@ -18,13 +18,16 @@ interface MemoryCommandInterface
     public function createGlobalMemory(int $principalId, array $data): array;
 
     /**
-     * The agent must be reachable from the principal that owns `$principalId`.
-     * See {@see MemoryQueryInterface::listAgentMemories()} for the rationale.
+     * The agent must be reachable from the **calling user** (`$userId`,
+     * supplied by the controller's auth layer). See
+     * {@see MemoryQueryInterface::listAgentMemories()} for the visibility
+     * rationale.
      *
      * @param array<string, mixed> $data
      * @return array
+     * @throws \Spora\Services\Exceptions\AgentNotFoundException When the agent is not visible to the caller.
      */
-    public function createAgentMemory(int $agentId, int $principalId, array $data): array;
+    public function createAgentMemory(int $agentId, int $userId, int $principalId, array $data): array;
 
     /**
      * @param array<string, mixed> $data
@@ -35,8 +38,9 @@ interface MemoryCommandInterface
     /**
      * @param array<string, mixed> $data
      * @return array|null
+     * @throws \Spora\Services\Exceptions\AgentNotFoundException When the agent is not visible to the caller.
      */
-    public function updateAgentMemory(string $memoryId, int $agentId, int $principalId, array $data): ?array;
+    public function updateAgentMemory(string $memoryId, int $agentId, int $userId, int $principalId, array $data): ?array;
 
     /**
      * @param array<string, mixed> $data Must contain `find` and `new_text`.
@@ -47,12 +51,16 @@ interface MemoryCommandInterface
     /**
      * @param array<string, mixed> $data Must contain `find` and `new_text`.
      * @return array|null
+     * @throws \Spora\Services\Exceptions\AgentNotFoundException When the agent is not visible to the caller.
      */
-    public function replaceAgentMemory(string $memoryId, int $agentId, int $principalId, array $data): ?array;
+    public function replaceAgentMemory(string $memoryId, int $agentId, int $userId, int $principalId, array $data): ?array;
 
     public function deleteGlobalMemory(string $memoryId, int $principalId): bool;
 
-    public function deleteAgentMemory(string $memoryId, int $agentId, int $principalId): bool;
+    /**
+     * @throws \Spora\Services\Exceptions\AgentNotFoundException When the agent is not visible to the caller.
+     */
+    public function deleteAgentMemory(string $memoryId, int $agentId, int $userId, int $principalId): bool;
 
     /**
      * @param list<string> $orderedIds Memory UUIDs in desired display order
@@ -61,8 +69,9 @@ interface MemoryCommandInterface
 
     /**
      * @param list<string> $orderedIds Memory UUIDs in desired display order
+     * @throws \Spora\Services\Exceptions\AgentNotFoundException When the agent is not visible to the caller.
      */
-    public function reorderAgentMemories(int $agentId, int $principalId, array $orderedIds): void;
+    public function reorderAgentMemories(int $agentId, int $userId, int $principalId, array $orderedIds): void;
 
     /**
      * Throws {@see Exceptions\MemoryValidationException}

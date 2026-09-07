@@ -16,15 +16,19 @@ use Spora\Services\PrincipalResolver;
  * Lives next to {@see MemoryCommandService} after the v2 split so each
  * side stays under Sonar's per-class method-count ceiling.
  *
- * Agent-scoped methods take `$principalId` (the caller's "acting
- * principal") and resolve it back to a user id through
- * {@see PrincipalResolver::ownerUserId()} so the visibility gate at
- * {@see PrincipalResolver::isVisibleTo()} expands to the user's full
- * principal set. The pre-v2.1 implementation used strict
- * `principal_id = $principalId` against the user's personal principal
- * id, which silently 404'd every agent owned by a group the user
- * happens to belong to — see the `GroupVisibilityTest` suite for
- * coverage of that path.
+ * Agent-scoped methods take `$userId` (the calling user, supplied by
+ * the controller's auth layer) and pass it straight to
+ * {@see PrincipalResolver::isVisibleTo()} so the gate expands to the
+ * user's full visible-principal set. The pre-v2.1 implementation used
+ * strict `principal_id = $actingPrincipalId` against the caller's
+ * personal principal id, which silently 404'd every agent owned by a
+ * group the user belongs to. The pre-fix-release-readiness
+ * implementation routed through {@see PrincipalResolver::ownerUserId()}
+ * to "recover" a user id from the acting principal — wrong, that
+ * returned the principal's owner, so any non-owner member of a group
+ * could read/write every agent visible to the owner (cross-principal
+ * IDOR). See the `GroupVisibilityTest` + `MemoryQueryServiceTest`
+ * suites for coverage of both fixes.
  */
 final class MemoryQueryService implements MemoryQueryInterface
 {
@@ -45,9 +49,9 @@ final class MemoryQueryService implements MemoryQueryInterface
             ->all();
     }
 
-    public function listAgentMemories(int $agentId, int $principalId, ?string $type = null): ?array
+    public function listAgentMemories(int $agentId, int $userId, ?string $type = null): ?array
     {
-        if ($this->findAgent($agentId, $principalId) === null) {
+        if ($this->findAgent($agentId, $userId) === null) {
             return null;
         }
 
@@ -72,9 +76,9 @@ final class MemoryQueryService implements MemoryQueryInterface
         return ['memory' => MemoryResource::toArray($memory)];
     }
 
-    public function getAgentMemory(string $memoryId, int $agentId, int $principalId): ?array
+    public function getAgentMemory(string $memoryId, int $agentId, int $userId): ?array
     {
-        if ($this->findAgent($agentId, $principalId) === null) {
+        if ($this->findAgent($agentId, $userId) === null) {
             return null;
         }
 
@@ -105,13 +109,8 @@ final class MemoryQueryService implements MemoryQueryInterface
         }
     }
 
-    private function findAgent(int $id, int $principalId): ?Agent
+    private function findAgent(int $id, int $userId): ?Agent
     {
-        $userId = $this->principals->ownerUserId($principalId);
-        if ($userId === null) {
-            return null;
-        }
-
         return $this->principals->isVisibleTo($id, $userId) ? Agent::find($id) : null;
     }
 }

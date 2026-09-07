@@ -16,33 +16,35 @@ Requires `spora-ai/spora-core` ≥ 0.12.0 (when this plugin shipped, the memorie
 
 ## What it does
 
-- Surfaces rows from the `memories` table as a sidebar-and-detail admin panel scoped per user (global) and per agent.
-- Creates a `memories_000001_create_memories_table.php` migration. On installs upgrading from a host that already shipped the `memories` table, the migration's `hasTable('memories')` guard makes it a no-op.
-- Ships two LLM-callable tools — `memory` (agent-scoped) and `global_memory` (cross-agent, per user) — each with `list`, `get`, `save`, and `delete` operations. List / get / save auto-approve; only `delete` requires explicit user approval (it is destructive).
+- Surfaces rows from the `memories` table as a sidebar-and-detail admin panel scoped per principal (global memories) and per agent (agent-scoped memories).
+- Ships two migrations: `memories_000001_create_memories_table.php` (idempotent `hasTable` guard) and `memories_000002_introduce_principals_types_uuids.php` (v2 schema: principals model, `type` enum, UUIDv7 ids). The v2 migration is forward-only — see the migration file for the rationale and the pre-install-cleanup assumption.
+- Ships two LLM-callable tools — `memory` (agent-scoped) and `global_memory` (principal-scoped, shared across the principal's agents) — each with `list`, `get`, `save`, `replace`, and `delete` operations. Every memory is tagged with a `type` (`plan` / `documentation` / `examples` / `context`) which is mandatory on save/get/replace. The `replace` op performs an exact substring edit on memory content (errors on zero or non-unique matches). List/get/save auto-approve; replace and delete require user approval.
 - Adds a bundled agent template (`memories-assistant.json`) under the plugin's `agent-templates/` directory, wiring both tools onto the host's default system prompt with explicit guidance on when to use each.
 
 ## API surface
 
-After install, 12 endpoints appear under `/api/v1/memories*`:
+After install, 14 endpoints appear under `/api/v1/memories*`. All require `AuthMiddleware` + `CsrfMiddleware`. Every endpoint honours `?principal_id=N` for the `PrincipalChipRow`: omit it for the caller's user-principal, supply it to act on any principal (user or group) the caller controls.
 
-- `GET    /api/v1/memories` — list the current user's global memories.
-- `POST   /api/v1/memories` — create a global memory.
-- `PATCH  /api/v1/memories/reorder` — reorder global memories.
-- `GET    /api/v1/memories/{id}` — fetch a single global memory.
-- `PUT    /api/v1/memories/{id}` — update a global memory.
+- `GET    /api/v1/memories` — list the current principal's global memories. Optional `?type=plan|documentation|examples|context`.
+- `POST   /api/v1/memories` — create a global memory (requires `name`, `type`, `content`).
+- `PATCH  /api/v1/memories/reorder` — reorder global memories (body: `{order: [memoryId, ...]}`).
+- `GET    /api/v1/memories/{id}` — fetch a single global memory (UUIDv7).
+- `PUT    /api/v1/memories/{id}` — update a global memory (partial fields allowed).
+- `POST   /api/v1/memories/{id}/replace` — surgical substring replacement (`{find, new_text}`).
 - `DELETE /api/v1/memories/{id}` — delete a global memory.
 - `GET    /api/v1/agents/{agentId}/memories` — list memories for one agent.
 - `POST   /api/v1/agents/{agentId}/memories` — create an agent memory.
 - `PATCH  /api/v1/agents/{agentId}/memories/reorder` — reorder agent memories.
 - `GET    /api/v1/agents/{agentId}/memories/{memoryId}` — fetch one agent memory.
 - `PUT    /api/v1/agents/{agentId}/memories/{memoryId}` — update an agent memory.
+- `POST   /api/v1/agents/{agentId}/memories/{memoryId}/replace` — surgical substring replacement.
 - `DELETE /api/v1/agents/{agentId}/memories/{memoryId}` — delete an agent memory.
 
-All endpoints require `AuthMiddleware` + `CsrfMiddleware`.
+Memories use UUIDv7 ids; v7 sorts chronologically and keeps adjacent writes in B-tree order, which matters for editorial workflows. Legacy UUIDv4 ids from v0.2.x continue to be readable by name+type lookups; no data migration needed beyond the v2 schema migration (which is forward-only).
 
 ## Uninstalling
 
-`composer remove spora-ai/spora-plugin-memories` removes the admin-panel metadata from the App Registry, drops the 12 routes, and the navbar tile disappears cleanly. The `memories` table is **preserved** — uninstalling does not `Capsule::schema()->dropIfExists('memories')`. Reinstalling is a no-op on the schema. This is intentional: data persists across plugin uninstall/reinstall cycles.
+`composer remove spora-ai/spora-plugin-memories` removes the admin-panel metadata from the App Registry, drops the 14 routes, and the navbar tile disappears cleanly. The `memories` table is **preserved** — uninstalling does not `Capsule::schema()->dropIfExists('memories')`. Reinstalling is a no-op on the schema. This is intentional: data persists across plugin uninstall/reinstall cycles.
 
 ## Reference
 

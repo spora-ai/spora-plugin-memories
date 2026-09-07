@@ -26,12 +26,28 @@ use Illuminate\Database\Schema\Blueprint;
  *
  * `Idempotency`: this migration assumes the operator either has a fresh
  * install or has explicitly cleaned the `memories` table — the user
- * confirmed there are no live installations to migrate.
+ * confirmed there are no live installations to migrate. The precheck
+ * at the top of `up()` refuses the migration if any legacy row has a
+ * non-null `agent_id` (the SQLite rebuild path INSERTs every legacy
+ * row as `scope='global'`, which silently drops the agent-vs-global
+ * distinction); the MySQL path inherits the same guard for
+ * consistency even though the schema swap is in principle reversible
+ * there.
  */
 return new class extends Migration
 {
     public function up(): void
     {
+        $agentRows = (int) Capsule::table('memories')->whereNotNull('agent_id')->count();
+        if ($agentRows > 0) {
+            throw new \RuntimeException(sprintf(
+                'memories_000002 cannot run: %d agent-scoped row(s) present in the legacy `memories` table. ' .
+                'Back up the agent rows, drop them, and rerun the migration. ' .
+                'See the migration docblock for the forward-only cleanup assumption.',
+                $agentRows,
+            ));
+        }
+
         $schema = Capsule::schema();
         $driver = Capsule::connection()->getDriverName();
 
