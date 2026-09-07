@@ -20,11 +20,22 @@ use Spora\Services\PrincipalResolver;
  * lives in {@see MemoryValidator} and content-string edits in
  * {@see MemoryContentEditor}; this class only orchestrates them.
  *
- * Agent-scoped methods now resolve `$principalId` back to a user id
- * through {@see PrincipalResolver::ownerUserId()} so the visibility
- * gate at {@see PrincipalResolver::isVisibleTo()} expands to the
- * user's full principal set — see the matching rationale on
- * {@see MemoryQueryService}.
+ * Agent-scoped methods take `$userId` (the calling user, supplied by
+ * the controller's auth layer) and pass it straight to
+ * {@see PrincipalResolver::isVisibleTo()} so the gate expands to the
+ * user's full visible-principal set. The pre-fix-release-readiness
+ * implementation routed through {@see PrincipalResolver::ownerUserId()}
+ * against `$principalId`, which returned the principal's owner — a
+ * cross-principal IDOR. See the matching rationale on
+ * {@see MemoryQueryService} and the regression coverage in
+ * `MemoryQueryServiceTest` / `MemoryCommandServiceTest`.
+ *
+ * Every agent-scoped write throws {@see AgentNotFoundException} when
+ * the agent is not visible to the caller — `createAgentMemory` always
+ * did; `updateAgentMemory` / `replaceAgentMemory` / `deleteAgentMemory`
+ * used to return `null` / `false` and were normalised on the
+ * release-readiness pass so the controllers can centralise the 404
+ * translation in {@see AbstractMemoryController::translateMemoryFailure()}.
  *
  * `AgentNotFoundException` lives in `Spora\Services\Exceptions\` (a core
  * class) because Agent is a core model — moving the exception to the
@@ -35,6 +46,8 @@ use Spora\Services\PrincipalResolver;
 final class MemoryCommandService implements MemoryCommandInterface
 {
     private const DATETIME_FORMAT = 'Y-m-d H:i:s';
+
+    private const AGENT_NOT_FOUND = 'Agent not found';
 
     private readonly MemoryValidator $validator;
     private readonly MemoryContentEditor $contentEditor;
@@ -57,10 +70,10 @@ final class MemoryCommandService implements MemoryCommandInterface
         return ['memory' => MemoryResource::toArray($memory)];
     }
 
-    public function createAgentMemory(int $agentId, int $principalId, array $data): array
+    public function createAgentMemory(int $agentId, int $userId, int $principalId, array $data): array
     {
-        if ($this->findAgent($agentId, $principalId) === null) {
-            throw new AgentNotFoundException('Agent not found');
+        if ($this->findAgent($agentId, $userId) === null) {
+            throw new AgentNotFoundException(self::AGENT_NOT_FOUND);
         }
 
         $this->validator->validate($data, isCreation: true);
@@ -113,10 +126,10 @@ final class MemoryCommandService implements MemoryCommandInterface
         return ['memory' => MemoryResource::toArray($memory)];
     }
 
-    public function updateAgentMemory(string $memoryId, int $agentId, int $principalId, array $data): ?array
+    public function updateAgentMemory(string $memoryId, int $agentId, int $userId, int $principalId, array $data): ?array
     {
-        if ($this->findAgent($agentId, $principalId) === null) {
-            return null;
+        if ($this->findAgent($agentId, $userId) === null) {
+            throw new AgentNotFoundException(self::AGENT_NOT_FOUND);
         }
 
         $memory = Memory::where('id', $memoryId)->where('agent_id', $agentId)->where('scope', 'agent')->first();
@@ -164,10 +177,10 @@ final class MemoryCommandService implements MemoryCommandInterface
         return $this->applyReplace($memory, $data);
     }
 
-    public function replaceAgentMemory(string $memoryId, int $agentId, int $principalId, array $data): ?array
+    public function replaceAgentMemory(string $memoryId, int $agentId, int $userId, int $principalId, array $data): ?array
     {
-        if ($this->findAgent($agentId, $principalId) === null) {
-            return null;
+        if ($this->findAgent($agentId, $userId) === null) {
+            throw new AgentNotFoundException(self::AGENT_NOT_FOUND);
         }
 
         $memory = Memory::where('id', $memoryId)->where('agent_id', $agentId)->where('scope', 'agent')->first();
@@ -188,9 +201,6 @@ final class MemoryCommandService implements MemoryCommandInterface
         $newText = (string) ($data['new_text'] ?? '');
         $memory->content = $this->contentEditor->replaceInMemoryContent((string) ($memory->content ?? ''), $find, $newText);
         $memory->save();
-        Capsule::table('memories')
-            ->where('id', (string) $memory->id)
-            ->update(['updated_at' => date(self::DATETIME_FORMAT)]);
 
         return ['memory' => MemoryResource::toArray($memory->refresh())];
     }
@@ -206,10 +216,10 @@ final class MemoryCommandService implements MemoryCommandInterface
         return $deleted > 0;
     }
 
-    public function deleteAgentMemory(string $memoryId, int $agentId, int $principalId): bool
+    public function deleteAgentMemory(string $memoryId, int $agentId, int $userId, int $principalId): bool
     {
-        if ($this->findAgent($agentId, $principalId) === null) {
-            return false;
+        if ($this->findAgent($agentId, $userId) === null) {
+            throw new AgentNotFoundException(self::AGENT_NOT_FOUND);
         }
 
         $deleted = Capsule::table('memories')
@@ -232,10 +242,10 @@ final class MemoryCommandService implements MemoryCommandInterface
         }
     }
 
-    public function reorderAgentMemories(int $agentId, int $principalId, array $orderedIds): void
+    public function reorderAgentMemories(int $agentId, int $userId, int $principalId, array $orderedIds): void
     {
-        if ($this->findAgent($agentId, $principalId) === null) {
-            throw new AgentNotFoundException('Agent not found');
+        if ($this->findAgent($agentId, $userId) === null) {
+            throw new AgentNotFoundException(self::AGENT_NOT_FOUND);
         }
 
         $order = 1;
@@ -311,21 +321,12 @@ final class MemoryCommandService implements MemoryCommandInterface
     }
 
     /**
-     * Visibility-gated agent lookup. The pre-v2.1 implementation matched
-     * `principal_id = $principalId` against the caller's personal
-     * principal id, which silently 404'd every agent owned by a group
-     * the user belongs to. We now route through {@see PrincipalResolver::ownerUserId()}
-     * to recover the calling user id from the acting principal, then
-     * hand off to {@see PrincipalResolver::isVisibleTo()} which expands
-     * to the user's full principal set.
+     * Visibility-gated agent lookup. Hands the calling user id straight
+     * to {@see PrincipalResolver::isVisibleTo()} which expands to the
+     * user's full visible-principal set.
      */
-    private function findAgent(int $id, int $principalId): ?Agent
+    private function findAgent(int $id, int $userId): ?Agent
     {
-        $userId = $this->principals->ownerUserId($principalId);
-        if ($userId === null) {
-            return null;
-        }
-
         return $this->principals->isVisibleTo($id, $userId) ? Agent::find($id) : null;
     }
 

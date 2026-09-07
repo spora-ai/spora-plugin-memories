@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Memories\Http;
 
-use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
 use Spora\Services\Exceptions\AgentNotFoundException;
 use Spora\Services\Exceptions\PrincipalNotAccessibleException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Throwable;
 
 /**
  * Handles agent-scoped memory CRUD, reordering, and surgical substring
@@ -34,11 +34,12 @@ final class AgentMemoryController extends AbstractMemoryController
     public function index(Request $request): JsonResponse
     {
         try {
-            $principalId = $this->requestPrincipalId($request);
+            $userId = $this->requestUserId($request);
+            $this->requestPrincipalId($request);
             $agentId = (int) $request->attributes->get('agentId', 0);
             $type = $request->query->get('type');
 
-            $memories = $this->memoryQuery->listAgentMemories($agentId, $principalId, is_string($type) && $type !== '' ? $type : null);
+            $memories = $this->memoryQuery->listAgentMemories($agentId, $userId, is_string($type) && $type !== '' ? $type : null);
         } catch (PrincipalNotAccessibleException $e) {
             return $this->forbidden($e->getMessage());
         }
@@ -54,6 +55,7 @@ final class AgentMemoryController extends AbstractMemoryController
     public function store(Request $request): JsonResponse
     {
         try {
+            $userId = $this->requestUserId($request);
             $principalId = $this->requestPrincipalId($request);
             $agentId = (int) $request->attributes->get('agentId', 0);
 
@@ -63,7 +65,7 @@ final class AgentMemoryController extends AbstractMemoryController
             }
 
             $validationError = $this->validateCreateInput($body);
-            return $validationError ?? $this->runCreate(fn() => $this->memoryCommand->createAgentMemory($agentId, $principalId, $body));
+            return $validationError ?? $this->runCreate(fn() => $this->memoryCommand->createAgentMemory($agentId, $userId, $principalId, $body));
         } catch (PrincipalNotAccessibleException $e) {
             return $this->forbidden($e->getMessage());
         }
@@ -75,11 +77,11 @@ final class AgentMemoryController extends AbstractMemoryController
     public function show(Request $request): JsonResponse
     {
         try {
-            $principalId = $this->requestPrincipalId($request);
+            $userId = $this->requestUserId($request);
             $agentId = (int) $request->attributes->get('agentId', 0);
             $memoryId = (string) $request->attributes->get('memoryId', '');
 
-            $result = $this->memoryQuery->getAgentMemory($memoryId, $agentId, $principalId);
+            $result = $this->memoryQuery->getAgentMemory($memoryId, $agentId, $userId);
         } catch (PrincipalNotAccessibleException $e) {
             return $this->forbidden($e->getMessage());
         }
@@ -93,6 +95,7 @@ final class AgentMemoryController extends AbstractMemoryController
     public function update(Request $request): JsonResponse
     {
         try {
+            $userId = $this->requestUserId($request);
             $principalId = $this->requestPrincipalId($request);
             $agentId = (int) $request->attributes->get('agentId', 0);
             $memoryId = (string) $request->attributes->get('memoryId', '');
@@ -102,7 +105,7 @@ final class AgentMemoryController extends AbstractMemoryController
                 return $body;
             }
 
-            return $this->runUpdate(fn() => $this->memoryCommand->updateAgentMemory($memoryId, $agentId, $principalId, $body));
+            return $this->runUpdate(fn() => $this->memoryCommand->updateAgentMemory($memoryId, $agentId, $userId, $principalId, $body));
         } catch (PrincipalNotAccessibleException $e) {
             return $this->forbidden($e->getMessage());
         }
@@ -114,6 +117,7 @@ final class AgentMemoryController extends AbstractMemoryController
     public function replace(Request $request): JsonResponse
     {
         try {
+            $userId = $this->requestUserId($request);
             $principalId = $this->requestPrincipalId($request);
             $agentId = (int) $request->attributes->get('agentId', 0);
             $memoryId = (string) $request->attributes->get('memoryId', '');
@@ -124,7 +128,7 @@ final class AgentMemoryController extends AbstractMemoryController
             }
 
             $validationError = $this->validateReplaceInput($body);
-            return $validationError ?? $this->runReplace(fn() => $this->memoryCommand->replaceAgentMemory($memoryId, $agentId, $principalId, $body));
+            return $validationError ?? $this->runReplace(fn() => $this->memoryCommand->replaceAgentMemory($memoryId, $agentId, $userId, $principalId, $body));
         } catch (PrincipalNotAccessibleException $e) {
             return $this->forbidden($e->getMessage());
         }
@@ -136,13 +140,16 @@ final class AgentMemoryController extends AbstractMemoryController
     public function destroy(Request $request): JsonResponse
     {
         try {
+            $userId = $this->requestUserId($request);
             $principalId = $this->requestPrincipalId($request);
             $agentId = (int) $request->attributes->get('agentId', 0);
             $memoryId = (string) $request->attributes->get('memoryId', '');
 
-            $deleted = $this->memoryCommand->deleteAgentMemory($memoryId, $agentId, $principalId);
+            $deleted = $this->memoryCommand->deleteAgentMemory($memoryId, $agentId, $userId, $principalId);
         } catch (PrincipalNotAccessibleException $e) {
             return $this->forbidden($e->getMessage());
+        } catch (AgentNotFoundException) {
+            return $this->notFound();
         }
 
         return $deleted ? new JsonResponse(['data' => ['deleted' => true]]) : $this->notFound();
@@ -154,6 +161,7 @@ final class AgentMemoryController extends AbstractMemoryController
     public function reorder(Request $request): JsonResponse
     {
         try {
+            $userId = $this->requestUserId($request);
             $principalId = $this->requestPrincipalId($request);
             $agentId = (int) $request->attributes->get('agentId', 0);
 
@@ -164,7 +172,7 @@ final class AgentMemoryController extends AbstractMemoryController
 
             return $this->runReorder(
                 $body['order'] ?? [],
-                fn(array $order) => $this->memoryCommand->reorderAgentMemories($agentId, $principalId, $order),
+                fn(array $order) => $this->memoryCommand->reorderAgentMemories($agentId, $userId, $principalId, $order),
             );
         } catch (PrincipalNotAccessibleException $e) {
             return $this->forbidden($e->getMessage());
@@ -175,8 +183,8 @@ final class AgentMemoryController extends AbstractMemoryController
     {
         try {
             return $this->replaceResponse($operation());
-        } catch (MemoryValidationException | AgentNotFoundException $e) {
-            return $this->replaceResponse(null, $e);
+        } catch (Throwable $e) {
+            return $this->translateReplaceFailure($e);
         }
     }
 }

@@ -443,11 +443,11 @@ describe(GROUP_VISIBILITY_LABEL . ' :: Service layer regression', function (): v
         $f = createGroupVisibilityFixture(bootAuthLayer());
 
         // Member sees the agent.
-        $result = $service->listAgentMemories($f['agentId'], $f['member']['principalId']);
+        $result = $service->listAgentMemories($f['agentId'], $f['member']['userId']);
         expect($result)->toBeArray()->toBeEmpty();
 
         // Outsider does not.
-        $result = $service->listAgentMemories($f['agentId'], $f['outsider']['principalId']);
+        $result = $service->listAgentMemories($f['agentId'], $f['outsider']['userId']);
         expect($result)->toBeNull();
     });
 
@@ -455,19 +455,19 @@ describe(GROUP_VISIBILITY_LABEL . ' :: Service layer regression', function (): v
         $service = new MemoryCommandService();
         $f = createGroupVisibilityFixture(bootAuthLayer());
 
-        $result = $service->createAgentMemory($f['agentId'], $f['member']['principalId'], [
+        $result = $service->createAgentMemory($f['agentId'], $f['member']['userId'], $f['member']['principalId'], [
             'name' => 'created_by_member', 'type' => 'context', 'content' => 'ok',
         ]);
         expect($result['memory']['name'])->toBe('created_by_member');
 
-        expect(fn() => $service->createAgentMemory($f['agentId'], $f['outsider']['principalId'], [
+        expect(fn() => $service->createAgentMemory($f['agentId'], $f['outsider']['userId'], $f['outsider']['principalId'], [
             'name' => 'should_not_persist', 'type' => 'context', 'content' => 'no',
         ]))->toThrow(Spora\Services\Exceptions\AgentNotFoundException::class);
 
         expect(Capsule::table('memories')->where('name', 'should_not_persist')->doesntExist())->toBeTrue();
     });
 
-    test('MemoryCommandService::deleteAgentMemory returns false for outsider, true for member', function (): void {
+    test('MemoryCommandService::deleteAgentMemory throws for outsider, returns true for member', function (): void {
         $service = new MemoryCommandService();
         $f = createGroupVisibilityFixture(bootAuthLayer());
 
@@ -476,10 +476,11 @@ describe(GROUP_VISIBILITY_LABEL . ' :: Service layer regression', function (): v
             'type' => 'context', 'name' => 'deletable', 'order' => 1,
         ]);
 
-        expect($service->deleteAgentMemory((string) $memory->id, $f['agentId'], $f['outsider']['principalId']))->toBeFalse();
+        expect(fn() => $service->deleteAgentMemory((string) $memory->id, $f['agentId'], $f['outsider']['userId'], $f['outsider']['principalId']))
+            ->toThrow(Spora\Services\Exceptions\AgentNotFoundException::class);
         expect(Capsule::table('memories')->where('id', $memory->id)->exists())->toBeTrue();
 
-        expect($service->deleteAgentMemory((string) $memory->id, $f['agentId'], $f['member']['principalId']))->toBeTrue();
+        expect($service->deleteAgentMemory((string) $memory->id, $f['agentId'], $f['member']['userId'], $f['member']['principalId']))->toBeTrue();
         expect(Capsule::table('memories')->where('id', $memory->id)->exists())->toBeFalse();
     });
 });

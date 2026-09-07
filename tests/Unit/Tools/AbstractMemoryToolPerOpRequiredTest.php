@@ -43,8 +43,8 @@ it('binds content to save only', function () {
     expect(abstractMemoryToolParameterArgs('content')['required'])->toBe(['save']);
 });
 
-it('binds type to save, replace, get', function () {
-    $expected = ['save', 'replace', 'get'];
+it('binds type to save, replace, get, delete', function () {
+    $expected = ['save', 'replace', 'get', 'delete'];
     sort($expected);
     $actual = abstractMemoryToolParameterArgs('type')['required'];
     sort($actual);

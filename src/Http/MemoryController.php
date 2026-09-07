@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Memories\Http;
 
-use Spora\Plugins\Memories\Services\Exceptions\MemoryValidationException;
-use Spora\Services\Exceptions\AgentNotFoundException;
 use Spora\Services\Exceptions\PrincipalNotAccessibleException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Throwable;
 
 /**
  * Handles principal-scoped (formerly user-scoped) memory CRUD, reordering,
@@ -162,8 +161,8 @@ final class MemoryController extends AbstractMemoryController
     {
         try {
             return $this->replaceResponse($operation());
-        } catch (MemoryValidationException | AgentNotFoundException $e) {
-            return $this->replaceResponse(null, $e);
+        } catch (Throwable $e) {
+            return $this->translateReplaceFailure($e);
         }
     }
 }

@@ -27,8 +27,8 @@ use Throwable;
  * vs `createAgentMemory`) and which URL parameter identifies the
  * target (memory id vs memory id + agent id).
  *
- * Hoisting the principal-resolver cache, JSON decoder, error envelope
- * factory, and per-op input validation here is what keeps both
+ * Hoisting the principal/user resolver memoisation, JSON decoder, error
+ * envelope factory, and per-op input validation here is what keeps both
  * controllers under Sonar's per-method return-count ceiling and
  * eliminates the duplicated `resolvePrincipalId()` / `decodeJson()` /
  * `error()` / `notFound()` blocks the gate flagged.
@@ -38,6 +38,7 @@ abstract class AbstractMemoryController
     protected const INVALID_JSON_MESSAGE = 'Request body must be valid JSON.';
 
     private ?int $resolvedPrincipalId = null;
+    private ?int $resolvedUserId = null;
 
     public function __construct(
         protected readonly AuthService $authService,
@@ -49,10 +50,8 @@ abstract class AbstractMemoryController
     /**
      * Resolve the principal id once per request. Both controllers feed
      * this into the service layer; agent-scoped services then route it
-     * through {@see \Spora\Services\PrincipalResolver::ownerUserId()} so
-     * the visibility gate at
-     * {@see \Spora\Services\PrincipalResolver::isVisibleTo()} expands to
-     * the user's full principal set.
+     * straight through {@see \Spora\Services\PrincipalResolver::isVisibleTo()}
+     * against the calling user id (see {@see requestUserId()}).
      *
      * The frontend's `PrincipalChipRow` lets the operator pick which
      * principal to act as (their own user-principal or any group they
@@ -73,10 +72,7 @@ abstract class AbstractMemoryController
         if ($this->resolvedPrincipalId !== null) {
             return $this->resolvedPrincipalId;
         }
-        $userId = $this->authService->currentUserId();
-        if ($userId === null) {
-            throw new NotAuthenticatedException('Authenticated user required');
-        }
+        $userId = $this->requestUserId($request);
 
         $requestedPrincipalId = self::extractPrincipalIdFromRequest($request);
         if ($requestedPrincipalId !== null) {
@@ -101,6 +97,29 @@ abstract class AbstractMemoryController
         $this->resolvedPrincipalId = (int) $this->principals->ensureUserPrincipal($userId)->id;
 
         return $this->resolvedPrincipalId;
+    }
+
+    /**
+     * Resolve the calling user id once per request. Memoised so repeated
+     * lookups against the auth layer don't hit the session for every
+     * service call. Used by both controllers to feed the agent-scoped
+     * service methods, which now take `$userId` (not `$principalId`) so
+     * {@see \Spora\Services\PrincipalResolver::isVisibleTo()} resolves
+     * visibility against the caller — not the principal's owner.
+     *
+     * @throws NotAuthenticatedException When no user is logged in.
+     */
+    protected function requestUserId(Request $request): int
+    {
+        if ($this->resolvedUserId !== null) {
+            return $this->resolvedUserId;
+        }
+        $userId = $this->authService->currentUserId();
+        if ($userId === null) {
+            throw new NotAuthenticatedException('Authenticated user required');
+        }
+
+        return $this->resolvedUserId = $userId;
     }
 
     /**
@@ -180,26 +199,41 @@ abstract class AbstractMemoryController
     }
 
     /**
-     * Shared validation for `POST .../replace`: name, type, and `find`
-     * are required; the type must be in the document-type enum.
+     * Shared validation for `POST .../replace`: `find` and `new_text` are
+     * required (the memory is identified by the URL `{id}`, not by name).
+     *
+     * `name` and `type` are accepted for back-compat with the tool path
+     * (which still addresses memories by `name + type`) but are optional
+     * here — they're never read downstream of this check. Validating
+     * `type` when present still surfaces unknown-type 422s.
+     *
+     * `new_text=""` is intentionally rejected: with the previous
+     * implementation, sending `{new_text: ""}` silently deleted the
+     * matched substring via `str_replace`. Operators must opt in to
+     * that semantics by explicitly removing the substring from the body
+     * (e.g. via `PUT` with the patched content).
      *
      * @param array<string, mixed> $body
      */
     protected function validateReplaceInput(array $body): ?JsonResponse
     {
-        $name = trim((string) ($body['name'] ?? ''));
-        $type = (string) ($body['type'] ?? '');
         $find = (string) ($body['find'] ?? '');
+        $newText = (string) ($body['new_text'] ?? '');
 
-        if ($name === '' || $type === '' || $find === '') {
+        if ($find === '' || $newText === '') {
             return $this->error(
                 'VALIDATION_ERROR',
-                'name, type, and find are required.',
+                'find and new_text are required.',
                 Response::HTTP_UNPROCESSABLE_ENTITY,
             );
         }
 
-        return $this->validateType($type);
+        $type = (string) ($body['type'] ?? '');
+        if ($type !== '') {
+            return $this->validateType($type);
+        }
+
+        return null;
     }
 
     /**
@@ -307,18 +341,18 @@ abstract class AbstractMemoryController
     /**
      * Translate the result of a `replace*` service call into the right
      * JSON response — distinguishes the "found and replaced" success from
-     * the "memory disappeared" not-found, and rethrows validation/agent
-     * lookup failures as typed responses instead of leaking generic
-     * RuntimeExceptions into the global error handler.
+     * the "memory disappeared" not-found.
      *
-     * @param array<string, mixed>|null $result
-     * @param Throwable|null $caughtException Exception caught while attempting the replace, if any.
+     * Exception translation lives in {@see translateReplaceFailure()}
+     * so the per-op wrapper in each concrete controller catches and
+     * routes failures through a single helper, mirroring how
+     * {@see translateMemoryFailure()} handles the create/update/reorder
+     * wrappers. `replaceResponse` itself is now Throwable-free.
+     *
+     * @param array<string, mixed>|null $result Service result, or null when the memory disappeared.
      */
-    protected function replaceResponse(?array $result, ?Throwable $caughtException = null): JsonResponse
+    protected function replaceResponse(?array $result): JsonResponse
     {
-        if ($caughtException !== null) {
-            return $this->errorResponseForReplaceException($caughtException);
-        }
         if ($result === null) {
             return $this->error(
                 MemoryTypes::REPLACE_NOT_FOUND_CODE,
@@ -330,7 +364,14 @@ abstract class AbstractMemoryController
         return new JsonResponse(['data' => $result]);
     }
 
-    private function errorResponseForReplaceException(Throwable $e): JsonResponse
+    /**
+     * Translate exceptions raised by the `replace*` service methods.
+     * Same shape as {@see translateMemoryFailure()} but with
+     * {@see MemoryTypes::REPLACE_NOT_UNIQUE_CODE} as the validation
+     * error code (the operator-facing semantics is "your `find`
+     * substring wasn't unique", not the generic 422).
+     */
+    protected function translateReplaceFailure(Throwable $e): JsonResponse
     {
         if ($e instanceof MemoryValidationException) {
             return $this->error(
@@ -342,7 +383,10 @@ abstract class AbstractMemoryController
         if ($e instanceof PrincipalNotAccessibleException) {
             return $this->forbidden($e->getMessage());
         }
+        if ($e instanceof AgentNotFoundException) {
+            return $this->notFound();
+        }
 
-        return $this->notFound();
+        throw $e;
     }
 }

@@ -36,6 +36,9 @@ use Spora\Services\PrincipalService;
  */
 final class MemoriesPlugin extends AbstractPlugin
 {
+    private const PATH_GLOBAL_MEMORY          = '/api/v1/memories/{id}';
+    private const PATH_AGENT_MEMORY           = '/api/v1/agents/{agentId}/memories/{memoryId}';
+
     public function getName(): string
     {
         return (new MemoriesApp())->displayName();
@@ -91,19 +94,19 @@ final class MemoriesPlugin extends AbstractPlugin
         $r->addRoute('GET', '/api/v1/memories', [MemoryController::class, 'index'], $auth);
         $r->addRoute('POST', '/api/v1/memories', [MemoryController::class, 'store'], $auth);
         $r->addRoute('PATCH', '/api/v1/memories/reorder', [MemoryController::class, 'reorder'], $auth);
-        $r->addRoute('GET', '/api/v1/memories/{id}', [MemoryController::class, 'show'], $auth);
-        $r->addRoute('PUT', '/api/v1/memories/{id}', [MemoryController::class, 'update'], $auth);
+        $r->addRoute('GET', self::PATH_GLOBAL_MEMORY, [MemoryController::class, 'show'], $auth);
+        $r->addRoute('PUT', self::PATH_GLOBAL_MEMORY, [MemoryController::class, 'update'], $auth);
         $r->addRoute('POST', '/api/v1/memories/{id}/replace', [MemoryController::class, 'replace'], $auth);
-        $r->addRoute('DELETE', '/api/v1/memories/{id}', [MemoryController::class, 'destroy'], $auth);
+        $r->addRoute('DELETE', self::PATH_GLOBAL_MEMORY, [MemoryController::class, 'destroy'], $auth);
 
         // Agent-scoped memories
         $r->addRoute('GET', '/api/v1/agents/{agentId}/memories', [AgentMemoryController::class, 'index'], $auth);
         $r->addRoute('POST', '/api/v1/agents/{agentId}/memories', [AgentMemoryController::class, 'store'], $auth);
         $r->addRoute('PATCH', '/api/v1/agents/{agentId}/memories/reorder', [AgentMemoryController::class, 'reorder'], $auth);
-        $r->addRoute('GET', '/api/v1/agents/{agentId}/memories/{memoryId}', [AgentMemoryController::class, 'show'], $auth);
-        $r->addRoute('PUT', '/api/v1/agents/{agentId}/memories/{memoryId}', [AgentMemoryController::class, 'update'], $auth);
+        $r->addRoute('GET', self::PATH_AGENT_MEMORY, [AgentMemoryController::class, 'show'], $auth);
+        $r->addRoute('PUT', self::PATH_AGENT_MEMORY, [AgentMemoryController::class, 'update'], $auth);
         $r->addRoute('POST', '/api/v1/agents/{agentId}/memories/{memoryId}/replace', [AgentMemoryController::class, 'replace'], $auth);
-        $r->addRoute('DELETE', '/api/v1/agents/{agentId}/memories/{memoryId}', [AgentMemoryController::class, 'destroy'], $auth);
+        $r->addRoute('DELETE', self::PATH_AGENT_MEMORY, [AgentMemoryController::class, 'destroy'], $auth);
     }
 
     /**

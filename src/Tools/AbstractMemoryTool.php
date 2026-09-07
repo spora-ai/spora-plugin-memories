@@ -29,7 +29,7 @@ use Spora\Tools\ValueObjects\ToolResult;
  * agent memories because the agent FK never changes.
  */
 #[ToolParameter(name: 'name', type: 'string', description: 'Unique name for the memory (e.g. "user_preferences", "project_context").', required: ['get', 'save', 'delete', 'replace'])]
-#[ToolParameter(name: 'type', type: 'string', description: "Document type: 'plan', 'documentation', 'examples', or 'context'.", required: ['save', 'replace', 'get'], enum: ['plan', 'documentation', 'examples', 'context'])]
+#[ToolParameter(name: 'type', type: 'string', description: "Document type: 'plan', 'documentation', 'examples', or 'context'.", required: ['save', 'replace', 'get', 'delete'], enum: ['plan', 'documentation', 'examples', 'context'])]
 #[ToolParameter(name: 'content', type: 'string', description: 'Memory content in markdown. Required for save action.', required: ['save'])]
 #[ToolParameter(name: 'summary', type: 'string', description: 'Brief one-line summary for list view. Auto-derived from content if omitted.', required: false)]
 #[ToolParameter(name: 'order', type: 'integer', description: 'Sort order for listing. Defaults to 0.', required: false)]
@@ -163,7 +163,7 @@ abstract class AbstractMemoryTool extends AbstractTool
         $find = (string) ($arguments['find'] ?? '');
         $newText = (string) ($arguments['new_text'] ?? '');
 
-        foreach (['name' => $name, 'type' => $type, 'find' => $find] as $field => $value) {
+        foreach (['name' => $name, 'type' => $type, 'find' => $find, 'new_text' => $newText] as $field => $value) {
             if ($value === '') {
                 return new ToolResult(false, "Error: {$field} is required for replace action.");
             }
@@ -185,9 +185,6 @@ abstract class AbstractMemoryTool extends AbstractTool
             return new ToolResult(false, $e->getMessage());
         }
         $memory->save();
-        \Illuminate\Database\Capsule\Manager::table('memories')
-            ->where('id', $memory->id)
-            ->update(['updated_at' => gmdate('Y-m-d H:i:s')]);
 
         return new ToolResult(true, "Replaced 1 occurrence in [{$name}] (type={$type}).");
     }
