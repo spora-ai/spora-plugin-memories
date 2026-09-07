@@ -35,7 +35,7 @@ final class AgentMemoryController extends AbstractMemoryController
     {
         try {
             $userId = $this->requestUserId($request);
-            $principalId = $this->requestPrincipalId($request);
+            $this->requestPrincipalId($request);
             $agentId = (int) $request->attributes->get('agentId', 0);
             $type = $request->query->get('type');
 

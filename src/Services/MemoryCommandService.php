@@ -47,6 +47,8 @@ final class MemoryCommandService implements MemoryCommandInterface
 {
     private const DATETIME_FORMAT = 'Y-m-d H:i:s';
 
+    private const AGENT_NOT_FOUND = 'Agent not found';
+
     private readonly MemoryValidator $validator;
     private readonly MemoryContentEditor $contentEditor;
 
@@ -71,7 +73,7 @@ final class MemoryCommandService implements MemoryCommandInterface
     public function createAgentMemory(int $agentId, int $userId, int $principalId, array $data): array
     {
         if ($this->findAgent($agentId, $userId) === null) {
-            throw new AgentNotFoundException('Agent not found');
+            throw new AgentNotFoundException(self::AGENT_NOT_FOUND);
         }
 
         $this->validator->validate($data, isCreation: true);
@@ -127,7 +129,7 @@ final class MemoryCommandService implements MemoryCommandInterface
     public function updateAgentMemory(string $memoryId, int $agentId, int $userId, int $principalId, array $data): ?array
     {
         if ($this->findAgent($agentId, $userId) === null) {
-            throw new AgentNotFoundException('Agent not found');
+            throw new AgentNotFoundException(self::AGENT_NOT_FOUND);
         }
 
         $memory = Memory::where('id', $memoryId)->where('agent_id', $agentId)->where('scope', 'agent')->first();
@@ -178,7 +180,7 @@ final class MemoryCommandService implements MemoryCommandInterface
     public function replaceAgentMemory(string $memoryId, int $agentId, int $userId, int $principalId, array $data): ?array
     {
         if ($this->findAgent($agentId, $userId) === null) {
-            throw new AgentNotFoundException('Agent not found');
+            throw new AgentNotFoundException(self::AGENT_NOT_FOUND);
         }
 
         $memory = Memory::where('id', $memoryId)->where('agent_id', $agentId)->where('scope', 'agent')->first();
@@ -217,7 +219,7 @@ final class MemoryCommandService implements MemoryCommandInterface
     public function deleteAgentMemory(string $memoryId, int $agentId, int $userId, int $principalId): bool
     {
         if ($this->findAgent($agentId, $userId) === null) {
-            throw new AgentNotFoundException('Agent not found');
+            throw new AgentNotFoundException(self::AGENT_NOT_FOUND);
         }
 
         $deleted = Capsule::table('memories')
@@ -243,7 +245,7 @@ final class MemoryCommandService implements MemoryCommandInterface
     public function reorderAgentMemories(int $agentId, int $userId, int $principalId, array $orderedIds): void
     {
         if ($this->findAgent($agentId, $userId) === null) {
-            throw new AgentNotFoundException('Agent not found');
+            throw new AgentNotFoundException(self::AGENT_NOT_FOUND);
         }
 
         $order = 1;
