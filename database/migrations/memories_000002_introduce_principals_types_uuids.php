@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Database\Migrations\Migration;
+use Spora\Core\Database\MigrationHelpers;
 
 /**
  * Switch memories to the principals model, add document types, and migrate
@@ -26,16 +27,19 @@ use Illuminate\Database\Migrations\Migration;
  * Idempotency: this migration is idempotent so re-runs against a partial
  * state succeed; the precheck refuses the migration if any legacy row has
  * a non-null `agent_id` (forward-only data assumption). Each DROP / ADD
- * step is guarded by an `information_schema` (MySQL/MariaDB) or `PRAGMA`
- * (SQLite) existence check via the four `foreignKeyExists` /
- * `indexExists` / `findForeignKeyOn` / `findIndexOn` helpers plus the
- * `hasPrimaryKey` helper; the schema-swap ALTER TABLE is split into
+ * step is guarded by the five `MigrationHelpers` trait methods
+ * (`foreignKeyExists`, `indexExists`, `findForeignKeyOn`, `findIndexOn`,
+ * `hasPrimaryKey`), which read from `information_schema` (MySQL/MariaDB)
+ * or `PRAGMA` (SQLite). The schema-swap ALTER TABLE is split into
  * per-step statements so a re-run against a database that already has
- * some new columns / indexes / FKs skips cleanly. Pattern copied from
- * `spora-core/database/migrations/0067_introduce_principals_and_groups.php`.
+ * some new columns / indexes / FKs skips cleanly. The trait lives at
+ * `spora-core/app/Core/Database/MigrationHelpers.php` and is shared with
+ * `0067_introduce_principals_and_groups` / `0073_add_principal_id_and_trigger_user_id_to_tasks`.
  */
 return new class extends Migration
 {
+    use MigrationHelpers;
+
     public function up(): void
     {
         $agentRows = (int) Capsule::table('memories')->whereNotNull('agent_id')->count();
@@ -75,12 +79,7 @@ return new class extends Migration
             Capsule::statement('ALTER TABLE memories DROP COLUMN user_id');
         }
 
-        $hasPk = Capsule::selectOne(
-            "SELECT INDEX_NAME FROM information_schema.STATISTICS "
-            . "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'memories' "
-            . "AND INDEX_NAME = 'PRIMARY' LIMIT 1"
-        );
-        if ($hasPk !== null) {
+        if ($this->hasPrimaryKey('memories')) {
             Capsule::statement('ALTER TABLE memories DROP PRIMARY KEY');
         }
         if ($schema->hasColumn('memories', 'id')) {
@@ -205,123 +204,5 @@ return new class extends Migration
         // semantics and require knowing the migration order. Operators who
         // need to roll back should restore from a backup taken before the
         // upgrade. Mirrors the policy in spora-core 0067.
-    }
-
-    /** Driver-aware FK existence check. Mirrors the helper in
-     *  `spora-core/database/migrations/0067_introduce_principals_and_groups.php`;
-     *  required to make DROP / ADD CONSTRAINT steps safe to replay
-     *  after a partial failure. */
-    private function foreignKeyExists(string $table, string $constraintName): bool
-    {
-        $driver = Capsule::connection()->getDriverName();
-        if ($driver === 'mysql' || $driver === 'mariadb') {
-            $row = Capsule::selectOne(
-                'SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS '
-                . 'WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = ? '
-                . "AND CONSTRAINT_NAME = ? AND CONSTRAINT_TYPE = 'FOREIGN KEY' LIMIT 1",
-                [$table, $constraintName]
-            );
-            return $row !== null;
-        }
-
-        $column = substr($constraintName, strlen("fk_{$table}_"));
-        $fks = Capsule::select("PRAGMA foreign_key_list('{$table}')");
-        foreach ($fks as $fk) {
-            if ($fk->from === $column) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Driver-aware index existence check. */
-    private function indexExists(string $table, string $indexName): bool
-    {
-        $driver = Capsule::connection()->getDriverName();
-        if ($driver === 'mysql' || $driver === 'mariadb') {
-            $row = Capsule::selectOne(
-                'SELECT INDEX_NAME FROM information_schema.STATISTICS '
-                . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? '
-                . 'AND INDEX_NAME = ? LIMIT 1',
-                [$table, $indexName]
-            );
-            return $row !== null;
-        }
-
-        $rows = Capsule::select("PRAGMA index_list('{$table}')");
-        foreach ($rows as $row) {
-            if ($row->name === $indexName) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Returns true if the named table has a PRIMARY KEY (any column).
-     *  MySQL/MariaDB only — callers gate by driver. */
-    private function hasPrimaryKey(string $table): bool
-    {
-        $row = Capsule::selectOne(
-            'SELECT INDEX_NAME FROM information_schema.STATISTICS '
-            . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? '
-            . "AND INDEX_NAME = 'PRIMARY' LIMIT 1",
-            [$table]
-        );
-        return $row !== null;
-    }
-
-    /** Driver-aware lookup for the FK that references $column on $table.
-     *  Returns the constraint name, or null if none. */
-    private function findForeignKeyOn(string $table, string $column): ?string
-    {
-        $driver = Capsule::connection()->getDriverName();
-        if ($driver === 'mysql' || $driver === 'mariadb') {
-            $row = Capsule::selectOne(
-                'SELECT kcu.CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE kcu '
-                . 'INNER JOIN information_schema.TABLE_CONSTRAINTS tc '
-                . 'ON tc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA '
-                . 'AND tc.TABLE_NAME = kcu.TABLE_NAME '
-                . 'AND tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME '
-                . 'WHERE kcu.TABLE_SCHEMA = DATABASE() '
-                . 'AND kcu.TABLE_NAME = ? '
-                . 'AND kcu.COLUMN_NAME = ? '
-                . "AND tc.CONSTRAINT_TYPE = 'FOREIGN KEY' LIMIT 1",
-                [$table, $column]
-            );
-            return $row?->CONSTRAINT_NAME;
-        }
-
-        return null;
-    }
-
-    /** Driver-aware lookup for the index whose leftmost column is $column.
-     *  Returns the index name, or null if none. */
-    private function findIndexOn(string $table, string $column): ?string
-    {
-        $driver = Capsule::connection()->getDriverName();
-        if ($driver === 'mysql' || $driver === 'mariadb') {
-            $row = Capsule::selectOne(
-                'SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS '
-                . 'WHERE TABLE_SCHEMA = DATABASE() '
-                . 'AND TABLE_NAME = ? '
-                . 'AND COLUMN_NAME = ? '
-                . 'AND SEQ_IN_INDEX = 1 '
-                . "AND INDEX_NAME <> 'PRIMARY' LIMIT 1",
-                [$table, $column]
-            );
-            return $row?->INDEX_NAME;
-        }
-
-        $rows = Capsule::select("PRAGMA index_list('{$table}')");
-        foreach ($rows as $row) {
-            if ($row->origin !== 'c') {
-                continue;
-            }
-            $cols = Capsule::select("PRAGMA index_info('{$row->name}')");
-            if ($cols !== [] && $cols[0]->name === $column) {
-                return $row->name;
-            }
-        }
-        return null;
     }
 };
