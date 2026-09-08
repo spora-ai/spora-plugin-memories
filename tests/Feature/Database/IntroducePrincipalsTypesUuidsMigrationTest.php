@@ -84,8 +84,8 @@ function simulateMemoriesPartialState(): void
     $sql = "CREATE TABLE memories (\n  ";
     $sql .= implode(",\n  ", $columnDefs);
     foreach ($fkDefs as $def) {
-        $cols = implode(', ', array_map(static fn ($c) => "\"{$c}\"", $def['columns']));
-        $refs = implode(', ', array_map(static fn ($r) => "\"{$r}\"", $def['references']));
+        $cols = implode(', ', array_map(static fn($c) => "\"{$c}\"", $def['columns']));
+        $refs = implode(', ', array_map(static fn($r) => "\"{$r}\"", $def['references']));
         $sql .= ",\n  FOREIGN KEY ({$cols}) REFERENCES \"{$def['table']}\" ({$refs})";
     }
     $sql .= "\n)";
@@ -97,8 +97,8 @@ function simulateMemoriesPartialState(): void
     $conn->statement($sql);
 
     if ($rows !== []) {
-        $columnsToKeep = array_map(static fn ($c) => $c->name, $columns);
-        $colsList = implode(', ', array_map(static fn ($c) => "\"{$c}\"", $columnsToKeep));
+        $columnsToKeep = array_map(static fn($c) => $c->name, $columns);
+        $colsList = implode(', ', array_map(static fn($c) => "\"{$c}\"", $columnsToKeep));
         $placeholders = '(' . implode(',', array_fill(0, count($columnsToKeep), '?')) . ')';
         foreach ($rows as $row) {
             $bindings = [];
@@ -169,7 +169,7 @@ test('memories_000002 idempotency: re-running up() on a fresh post-state does no
 
     // The user's MariaDB error: re-run after the post-state is reached.
     // With idempotent guards, this must NOT throw the 1091 we saw on MariaDB.
-    expect(fn () => $migration->up())->not()->toThrow(Throwable::class);
+    expect(fn() => $migration->up())->not()->toThrow(Throwable::class);
 
     expect(Capsule::schema()->hasColumn('memories', 'id'))->toBeTrue();
     expect(Capsule::schema()->hasColumn('memories', 'user_id'))->toBeFalse();
@@ -194,7 +194,7 @@ test('memories_000002 partial-state: pre-dropping the user_id FK + index lets up
     expect($helpers->indexExists('memories', 'memories_user_id_name_index'))->toBeFalse();
 
     $migration = require __DIR__ . '/../../../database/migrations/memories_000002_introduce_principals_types_uuids.php';
-    expect(fn () => $migration->up())->not()->toThrow(Throwable::class);
+    expect(fn() => $migration->up())->not()->toThrow(Throwable::class);
 
     expect(Capsule::schema()->hasColumn('memories', 'user_id'))->toBeFalse();
     expect(Capsule::schema()->hasColumn('memories', 'scope'))->toBeTrue();
