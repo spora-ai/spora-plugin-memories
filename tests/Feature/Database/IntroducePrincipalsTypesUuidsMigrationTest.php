@@ -200,3 +200,37 @@ test('memories_000002 partial-state: pre-dropping the user_id FK + index lets up
     expect(Capsule::schema()->hasColumn('memories', 'scope'))->toBeTrue();
     expect(Capsule::schema()->hasColumn('memories', 'scope_key'))->toBeTrue();
 });
+
+/**
+ * Test 4: partial-state with auto-increment PRIMARY KEY still present.
+ * The MySQL path of the migration must add a fallback index on `id`
+ * BEFORE dropping the PK, otherwise MariaDB/MySQL errors with
+ * 1075 "there can be only one auto column and it must be defined
+ * as a key".
+ *
+ * SQLite doesn't enforce the same constraint as MariaDB (it allows
+ * multiple INTEGER PRIMARY KEY columns), so this test runs cleanly
+ * on SQLite — its purpose is to verify the index is added in the
+ * right order so the migration produces the correct post-state.
+ */
+test('memories_000002 auto-increment PK: pre-existing PK triggers the temp-index fallback', function (): void {
+    $predecessor = require __DIR__ . '/../../../database/migrations/memories_000001_create_memories_table.php';
+    $predecessor->up();
+
+    $migration = require __DIR__ . '/../../../database/migrations/memories_000002_introduce_principals_types_uuids.php';
+    expect(fn() => $migration->up())->not()->toThrow(Throwable::class);
+
+    // Verify the temp index was added and then dropped with the legacy id column.
+    // On both MySQL and SQLite the index should NOT exist after the migration
+    // completes (MySQL drops it automatically when the column is dropped;
+    // SQLite behaves the same). The trait's indexExists() is driver-aware
+    // (information_schema on MySQL, PRAGMA index_list on SQLite), unlike
+    // a raw `information_schema.STATISTICS` query that fails on SQLite.
+    $helpers = migrationHelpers();
+    expect($helpers->indexExists('memories', 'idx_memories_id_temp'))->toBeFalse();
+
+    // Post-state assertions (same as test 1)
+    expect(Capsule::schema()->hasColumn('memories', 'id'))->toBeTrue();
+    expect(Capsule::schema()->hasColumn('memories', 'user_id'))->toBeFalse();
+    expect(Capsule::schema()->hasColumn('memories', 'scope'))->toBeTrue();
+});

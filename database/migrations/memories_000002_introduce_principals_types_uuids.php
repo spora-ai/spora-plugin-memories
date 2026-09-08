@@ -79,6 +79,17 @@ return new class extends Migration
             Capsule::statement('ALTER TABLE memories DROP COLUMN user_id');
         }
 
+        // Add a temporary non-PRIMARY index on id BEFORE dropping PRIMARY KEY.
+        // MariaDB/MySQL refuses to drop the PRIMARY KEY on an AUTO_INCREMENT
+        // column that has no other key (error 1075: "there can be only one
+        // auto column and it must be defined as a key"). The temp index keeps
+        // `id` keyed while we swap it to the new UUIDv7 column. When the legacy
+        // `id` column is dropped below, MySQL drops the index with it
+        // automatically — no cleanup needed.
+        if (!$this->indexExists('memories', 'idx_memories_id_temp')) {
+            Capsule::statement('ALTER TABLE memories ADD INDEX idx_memories_id_temp (id)');
+        }
+
         if ($this->hasPrimaryKey('memories')) {
             Capsule::statement('ALTER TABLE memories DROP PRIMARY KEY');
         }
