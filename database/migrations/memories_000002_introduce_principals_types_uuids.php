@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
+use Spora\Core\Database\MigrationHelpers;
 
 /**
  * Switch memories to the principals model, add document types, and migrate
@@ -24,18 +24,22 @@ use Illuminate\Database\Schema\Blueprint;
  *   - MySQL: ALTER TABLE … ADD COLUMN … + ADD CONSTRAINT does the swap
  *     in a single statement.
  *
- * `Idempotency`: this migration assumes the operator either has a fresh
- * install or has explicitly cleaned the `memories` table — the user
- * confirmed there are no live installations to migrate. The precheck
- * at the top of `up()` refuses the migration if any legacy row has a
- * non-null `agent_id` (the SQLite rebuild path INSERTs every legacy
- * row as `scope='global'`, which silently drops the agent-vs-global
- * distinction); the MySQL path inherits the same guard for
- * consistency even though the schema swap is in principle reversible
- * there.
+ * Idempotency: this migration is idempotent so re-runs against a partial
+ * state succeed; the precheck refuses the migration if any legacy row has
+ * a non-null `agent_id` (forward-only data assumption). Each DROP / ADD
+ * step is guarded by the five `MigrationHelpers` trait methods
+ * (`foreignKeyExists`, `indexExists`, `findForeignKeyOn`, `findIndexOn`,
+ * `hasPrimaryKey`), which read from `information_schema` (MySQL/MariaDB)
+ * or `PRAGMA` (SQLite). The schema-swap ALTER TABLE is split into
+ * per-step statements so a re-run against a database that already has
+ * some new columns / indexes / FKs skips cleanly. The trait lives at
+ * `spora-core/app/Core/Database/MigrationHelpers.php` and is shared with
+ * `0067_introduce_principals_and_groups` / `0073_add_principal_id_and_trigger_user_id_to_tasks`.
  */
 return new class extends Migration
 {
+    use MigrationHelpers;
+
     public function up(): void
     {
         $agentRows = (int) Capsule::table('memories')->whereNotNull('agent_id')->count();
@@ -56,37 +60,80 @@ return new class extends Migration
             return;
         }
 
-        // MySQL path
-        $schema->table('memories', static function (Blueprint $table): void {
-            $table->dropForeign(['user_id']);
-            $table->dropIndex(['user_id', 'name']);
-            $table->dropColumn('user_id');
-            $table->dropPrimary('id');
-            $table->dropColumn('id');
-            $table->char('id', 36)->first();
-        });
+        // MySQL / MariaDB path. Every DROP step is guarded because a
+        // prior failed run (or a manual cleanup) may have left the table
+        // missing the legacy FK / index / column — Laravel's
+        // `$table->dropForeign(['user_id'])` infers the FK name from
+        // `<table>_<col>_foreign` and bombs out with 1091 when that name
+        // no longer exists.
 
-        Capsule::statement(<<<'SQL'
-            ALTER TABLE memories
-                ADD COLUMN scope ENUM('global','agent') NOT NULL AFTER id,
-                ADD COLUMN type  ENUM('plan','documentation','examples','context') NOT NULL DEFAULT 'context' AFTER scope,
-                ADD COLUMN principal_id BIGINT UNSIGNED NULL AFTER id,
-                ADD COLUMN scope_key VARCHAR(255) GENERATED ALWAYS AS (
-                    CONCAT(
-                        scope, ':',
-                        COALESCE(principal_id, 0), ':',
-                        COALESCE(agent_id, 0), ':',
-                        type, ':',
-                        name
-                    )
-                ) STORED,
-                ADD PRIMARY KEY (id),
-                ADD CONSTRAINT fk_memories_principal_id FOREIGN KEY (principal_id) REFERENCES principals(id) ON DELETE CASCADE,
-                ADD UNIQUE INDEX uniq_memories_scope_key (scope_key),
-                ADD INDEX idx_memories_principal_scope_type (principal_id, scope, type),
-                ADD INDEX idx_memories_agent_scope_type_order (agent_id, scope, type, `order`),
-                DROP INDEX memories_agent_id_name
-        SQL);
+        $userFk = $this->findForeignKeyOn('memories', 'user_id');
+        if ($userFk !== null) {
+            Capsule::statement("ALTER TABLE memories DROP FOREIGN KEY {$userFk}");
+        }
+        $userIdx = $this->findIndexOn('memories', 'user_id');
+        if ($userIdx !== null) {
+            Capsule::statement("ALTER TABLE memories DROP INDEX {$userIdx}");
+        }
+        if ($schema->hasColumn('memories', 'user_id')) {
+            Capsule::statement('ALTER TABLE memories DROP COLUMN user_id');
+        }
+
+        if ($this->hasPrimaryKey('memories')) {
+            Capsule::statement('ALTER TABLE memories DROP PRIMARY KEY');
+        }
+        if ($schema->hasColumn('memories', 'id')) {
+            Capsule::statement('ALTER TABLE memories DROP COLUMN id');
+        }
+        if (!$schema->hasColumn('memories', 'id')) {
+            Capsule::statement('ALTER TABLE memories ADD COLUMN id CHAR(36) NOT NULL FIRST');
+        }
+
+        // Schema swap — split into per-step statements so each is skipped
+        // if the column / FK / index already exists from a partial prior
+        // run. Column references in `scope_key` resolve only once
+        // `scope`, `type`, `principal_id` exist, so add them in that
+        // order.
+
+        if (!$schema->hasColumn('memories', 'principal_id')) {
+            Capsule::statement('ALTER TABLE memories ADD COLUMN principal_id BIGINT UNSIGNED NULL AFTER id');
+        }
+        if (!$schema->hasColumn('memories', 'scope')) {
+            Capsule::statement("ALTER TABLE memories ADD COLUMN scope ENUM('global','agent') NOT NULL AFTER id");
+        }
+        if (!$schema->hasColumn('memories', 'type')) {
+            Capsule::statement("ALTER TABLE memories ADD COLUMN type ENUM('plan','documentation','examples','context') NOT NULL DEFAULT 'context' AFTER scope");
+        }
+        if (!$schema->hasColumn('memories', 'scope_key')) {
+            Capsule::statement(
+                "ALTER TABLE memories ADD COLUMN scope_key VARCHAR(255) GENERATED ALWAYS AS ("
+                . "CONCAT(scope, ':', COALESCE(principal_id, 0), ':', COALESCE(agent_id, 0), ':', type, ':', name)"
+                . ') STORED'
+            );
+        }
+
+        if (!$this->hasPrimaryKey('memories')) {
+            Capsule::statement('ALTER TABLE memories ADD PRIMARY KEY (id)');
+        }
+        if (!$this->foreignKeyExists('memories', 'fk_memories_principal_id')) {
+            Capsule::statement(
+                'ALTER TABLE memories ADD CONSTRAINT fk_memories_principal_id '
+                . 'FOREIGN KEY (principal_id) REFERENCES principals(id) ON DELETE CASCADE'
+            );
+        }
+        if (!$this->indexExists('memories', 'uniq_memories_scope_key')) {
+            Capsule::statement('ALTER TABLE memories ADD UNIQUE INDEX uniq_memories_scope_key (scope_key)');
+        }
+        if (!$this->indexExists('memories', 'idx_memories_principal_scope_type')) {
+            Capsule::statement('ALTER TABLE memories ADD INDEX idx_memories_principal_scope_type (principal_id, scope, type)');
+        }
+        if (!$this->indexExists('memories', 'idx_memories_agent_scope_type_order')) {
+            Capsule::statement('ALTER TABLE memories ADD INDEX idx_memories_agent_scope_type_order (agent_id, scope, type, `order`)');
+        }
+
+        if ($this->indexExists('memories', 'memories_agent_id_name')) {
+            Capsule::statement('ALTER TABLE memories DROP INDEX memories_agent_id_name');
+        }
     }
 
     private function upSqlite(): void
