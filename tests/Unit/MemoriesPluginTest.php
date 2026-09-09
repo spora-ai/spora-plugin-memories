@@ -85,11 +85,22 @@ it('MemoriesApp satisfies VueAppInterface contract (name + entry)', function ():
         ->and($app->entry())->toBe('main.js');
 });
 
-it('register() wires the two service interfaces to their concrete implementations', function (): void {
+it('subscribes to ContainerBuildingEvent and RoutesRegisteringEvent', function (): void {
+    $events = MemoriesPlugin::getSubscribedEvents();
+
+    expect($events)->toBe([
+        Spora\Events\ContainerBuildingEvent::class => 'onContainerBuilding',
+        Spora\Events\RoutesRegisteringEvent::class => 'onRoutesRegistering',
+    ]);
+});
+
+it('onContainerBuilding wires the two service interfaces to their concrete implementations', function (): void {
     $builder = new ContainerBuilder();
     $builder->useAutowiring(true);
 
-    (new MemoriesPlugin())->register($builder);
+    $dispatcher = new Symfony\Component\EventDispatcher\EventDispatcher();
+    $dispatcher->addSubscriber(new MemoriesPlugin());
+    $dispatcher->dispatch(new Spora\Events\ContainerBuildingEvent($builder));
 
     $container = $builder->build();
 
