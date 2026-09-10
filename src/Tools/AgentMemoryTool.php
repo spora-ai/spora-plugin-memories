@@ -23,7 +23,7 @@ use Spora\Tools\Attributes\ToolOperation;
 #[ToolOperation(name: 'list', description: 'List all memories with summaries. Optional `type` filter.', enabledByDefault: true, requiresApprovalByDefault: false)]
 #[ToolOperation(name: 'get', description: 'Get a single memory by name and type.', enabledByDefault: true, requiresApprovalByDefault: false)]
 #[ToolOperation(name: 'save', description: 'Create or update a memory. Requires `name`, `type`, `content`.', enabledByDefault: true, requiresApprovalByDefault: false)]
-#[ToolOperation(name: 'replace', description: 'Replace a single substring inside a memory content body. Errors on zero or multiple matches.', enabledByDefault: true, requiresApprovalByDefault: true)]
+#[ToolOperation(name: 'replace', description: 'Replace a single substring inside a memory content body. Errors on zero or multiple matches.', enabledByDefault: true, requiresApprovalByDefault: false)]
 #[ToolOperation(name: 'delete', description: 'Delete a memory by name and type.', enabledByDefault: true, requiresApprovalByDefault: true)]
 final class AgentMemoryTool extends AbstractMemoryTool
 {

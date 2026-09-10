@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Memories;
 
-use DI\ContainerBuilder;
-use Spora\Core\MiddlewareRouteCollector;
+use Spora\Events\ContainerBuildingEvent;
+use Spora\Events\RoutesRegisteringEvent;
 use Spora\Http\Middleware\AuthMiddleware;
 use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\AbstractPlugin;
@@ -18,6 +18,7 @@ use Spora\Plugins\Memories\Services\MemoryQueryService;
 use Spora\Plugins\Memories\Tools\AgentMemoryTool;
 use Spora\Plugins\Memories\Tools\GlobalMemoryTool;
 use Spora\Services\PrincipalService;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
  * Plugin entry point for the Memories feature.
@@ -34,10 +35,11 @@ use Spora\Services\PrincipalService;
  * controllers, the `memories` migrations, and the `memories-assistant`
  * agent template.
  */
-final class MemoriesPlugin extends AbstractPlugin
+final class MemoriesPlugin extends AbstractPlugin implements EventSubscriberInterface
 {
-    private const PATH_GLOBAL_MEMORY          = '/api/v1/memories/{id}';
-    private const PATH_AGENT_MEMORY           = '/api/v1/agents/{agentId}/memories/{memoryId}';
+    private const PATH_GLOBAL_MEMORY = '/api/v1/memories/{id}';
+    private const PATH_AGENT_MEMORY  = '/api/v1/agents/{agentId}/memories/{memoryId}';
+    private const AUTH               = [AuthMiddleware::class, CsrfMiddleware::class];
 
     public function getName(): string
     {
@@ -45,68 +47,82 @@ final class MemoriesPlugin extends AbstractPlugin
     }
 
     /**
-     * Wire the service interfaces → concrete class autowire + the two
-     * controllers. Invoked once per process during boot, before the
-     * container is built.
+     * Subscribe to the two boot-time events fired by spora-core. Listeners
+     * run on the framework-wide EventDispatcher built by
+     * {@see \Spora\Events\EventDispatcherFactory}.
      *
-     * Adding explicit bindings here is necessary because the host `App`
-     * does not know about the plugin's memory interfaces; without these
-     * definitions, resolving either controller at request-dispatch time
-     * would fail with `EntryNotFoundException`. The v2 split registered
-     * two narrow interfaces (`MemoryQueryInterface`, `MemoryCommandInterface`)
-     * so each side of the read/write split stays under Sonar's per-class
-     * method-count ceiling — controllers depend on whichever interfaces
-     * they actually call. `PrincipalService` is already globally
-     * registered in spora-core; we re-list it here so the plugin's
-     * container works when loaded standalone (e.g. in unit tests that
-     * skip the host boot path).
+     * - {@see ContainerBuildingEvent} → fires once per process, before the
+     *   DI container is built. {@see self::onContainerBuilding()} adds
+     *   bindings for the plugin's interfaces + controllers so PHP-DI can
+     *   autowire them at request time.
+     * - {@see RoutesRegisteringEvent} → fires per request, after the host
+     *   routes are registered. {@see self::onRoutesRegistering()} adds the
+     *   14 `/api/v1/memories*` routes behind Auth + CSRF.
      *
-     * @param ContainerBuilder $builder
+     * @return array<class-string, string>
      */
-    public function register(ContainerBuilder $builder): void
+    public static function getSubscribedEvents(): array
     {
-        $builder->addDefinitions([
-            MemoryQueryInterface::class    => \DI\autowire(MemoryQueryService::class),
-            MemoryCommandInterface::class  => \DI\autowire(MemoryCommandService::class),
-            MemoryController::class        => \DI\autowire(),
-            AgentMemoryController::class   => \DI\autowire(),
-            AgentMemoryTool::class         => \DI\autowire(),
-            GlobalMemoryTool::class        => \DI\autowire(),
-            PrincipalService::class        => \DI\autowire(),
+        return [
+            ContainerBuildingEvent::class => 'onContainerBuilding',
+            RoutesRegisteringEvent::class => 'onRoutesRegistering',
+        ];
+    }
+
+    /**
+     * Wire the service interfaces → concrete class autowire + the two
+     * controllers. Adding explicit bindings here is necessary because the
+     * host `App` does not know about the plugin's memory interfaces;
+     * without these definitions, resolving either controller at
+     * request-dispatch time would fail with `EntryNotFoundException`. The
+     * v2 split registered two narrow interfaces (`MemoryQueryInterface`,
+     * `MemoryCommandInterface`) so each side of the read/write split stays
+     * under Sonar's per-class method-count ceiling — controllers depend
+     * on whichever interfaces they actually call. `PrincipalService` is
+     * already globally registered in spora-core; we re-list it here so
+     * the plugin's container works when loaded standalone (e.g. in unit
+     * tests that skip the host boot path).
+     */
+    public function onContainerBuilding(ContainerBuildingEvent $event): void
+    {
+        $event->builder()->addDefinitions([
+            MemoryQueryInterface::class   => \DI\autowire(MemoryQueryService::class),
+            MemoryCommandInterface::class => \DI\autowire(MemoryCommandService::class),
+            MemoryController::class       => \DI\autowire(),
+            AgentMemoryController::class  => \DI\autowire(),
+            AgentMemoryTool::class        => \DI\autowire(),
+            GlobalMemoryTool::class       => \DI\autowire(),
+            PrincipalService::class       => \DI\autowire(),
         ]);
     }
 
     /**
      * Register the 14 `/api/v1/memories*` routes behind Auth + CSRF.
-     *
-     * Invoked per request after the host's `RouteDefinitions::register()`.
      * Path strings mirror spora-core's pre-extraction paths verbatim so
      * the frontend bundle (which has been calling these endpoints since
      * 0.8.x) Just Works.
-     *
-     * @param MiddlewareRouteCollector $r
      */
-    public function routes(MiddlewareRouteCollector $r): void
+    public function onRoutesRegistering(RoutesRegisteringEvent $event): void
     {
-        $auth = [AuthMiddleware::class, CsrfMiddleware::class];
+        $routes = $event->routes();
 
         // Global (principal-scoped) memories
-        $r->addRoute('GET', '/api/v1/memories', [MemoryController::class, 'index'], $auth);
-        $r->addRoute('POST', '/api/v1/memories', [MemoryController::class, 'store'], $auth);
-        $r->addRoute('PATCH', '/api/v1/memories/reorder', [MemoryController::class, 'reorder'], $auth);
-        $r->addRoute('GET', self::PATH_GLOBAL_MEMORY, [MemoryController::class, 'show'], $auth);
-        $r->addRoute('PUT', self::PATH_GLOBAL_MEMORY, [MemoryController::class, 'update'], $auth);
-        $r->addRoute('POST', '/api/v1/memories/{id}/replace', [MemoryController::class, 'replace'], $auth);
-        $r->addRoute('DELETE', self::PATH_GLOBAL_MEMORY, [MemoryController::class, 'destroy'], $auth);
+        $routes->addRoute('GET', '/api/v1/memories', [MemoryController::class, 'index'], self::AUTH);
+        $routes->addRoute('POST', '/api/v1/memories', [MemoryController::class, 'store'], self::AUTH);
+        $routes->addRoute('PATCH', '/api/v1/memories/reorder', [MemoryController::class, 'reorder'], self::AUTH);
+        $routes->addRoute('GET', self::PATH_GLOBAL_MEMORY, [MemoryController::class, 'show'], self::AUTH);
+        $routes->addRoute('PUT', self::PATH_GLOBAL_MEMORY, [MemoryController::class, 'update'], self::AUTH);
+        $routes->addRoute('POST', '/api/v1/memories/{id}/replace', [MemoryController::class, 'replace'], self::AUTH);
+        $routes->addRoute('DELETE', self::PATH_GLOBAL_MEMORY, [MemoryController::class, 'destroy'], self::AUTH);
 
         // Agent-scoped memories
-        $r->addRoute('GET', '/api/v1/agents/{agentId}/memories', [AgentMemoryController::class, 'index'], $auth);
-        $r->addRoute('POST', '/api/v1/agents/{agentId}/memories', [AgentMemoryController::class, 'store'], $auth);
-        $r->addRoute('PATCH', '/api/v1/agents/{agentId}/memories/reorder', [AgentMemoryController::class, 'reorder'], $auth);
-        $r->addRoute('GET', self::PATH_AGENT_MEMORY, [AgentMemoryController::class, 'show'], $auth);
-        $r->addRoute('PUT', self::PATH_AGENT_MEMORY, [AgentMemoryController::class, 'update'], $auth);
-        $r->addRoute('POST', '/api/v1/agents/{agentId}/memories/{memoryId}/replace', [AgentMemoryController::class, 'replace'], $auth);
-        $r->addRoute('DELETE', self::PATH_AGENT_MEMORY, [AgentMemoryController::class, 'destroy'], $auth);
+        $routes->addRoute('GET', '/api/v1/agents/{agentId}/memories', [AgentMemoryController::class, 'index'], self::AUTH);
+        $routes->addRoute('POST', '/api/v1/agents/{agentId}/memories', [AgentMemoryController::class, 'store'], self::AUTH);
+        $routes->addRoute('PATCH', '/api/v1/agents/{agentId}/memories/reorder', [AgentMemoryController::class, 'reorder'], self::AUTH);
+        $routes->addRoute('GET', self::PATH_AGENT_MEMORY, [AgentMemoryController::class, 'show'], self::AUTH);
+        $routes->addRoute('PUT', self::PATH_AGENT_MEMORY, [AgentMemoryController::class, 'update'], self::AUTH);
+        $routes->addRoute('POST', '/api/v1/agents/{agentId}/memories/{memoryId}/replace', [AgentMemoryController::class, 'replace'], self::AUTH);
+        $routes->addRoute('DELETE', self::PATH_AGENT_MEMORY, [AgentMemoryController::class, 'destroy'], self::AUTH);
     }
 
     /**
