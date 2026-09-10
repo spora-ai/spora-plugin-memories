@@ -58,14 +58,14 @@ describe('AgentMemoryTool::tool metadata', function (): void {
             ->toContain('my_memory');
     });
 
-    it('list/get/save auto-approve; delete and replace require approval', function (): void {
+    it('list/get/save/replace auto-approve; delete requires approval', function (): void {
         $tool = new AgentMemoryTool();
 
         expect($tool->requiresApprovalByDefault('list'))->toBeFalse()
             ->and($tool->requiresApprovalByDefault('get'))->toBeFalse()
             ->and($tool->requiresApprovalByDefault('save'))->toBeFalse()
-            ->and($tool->requiresApprovalByDefault('delete'))->toBeTrue()
-            ->and($tool->requiresApprovalByDefault('replace'))->toBeTrue();
+            ->and($tool->requiresApprovalByDefault('replace'))->toBeFalse()
+            ->and($tool->requiresApprovalByDefault('delete'))->toBeTrue();
     });
 });
 
@@ -432,9 +432,9 @@ describe('AgentMemoryTool::replace action', function (): void {
             ->and($result->content)->toContain('matches 3');
     });
 
-    it('replace requires approval by default', function (): void {
+    it('replace auto-approves by default (errors on ambiguous match)', function (): void {
         $tool = new AgentMemoryTool();
-        expect($tool->requiresApprovalByDefault('replace'))->toBeTrue();
+        expect($tool->requiresApprovalByDefault('replace'))->toBeFalse();
     });
 });
 
@@ -473,14 +473,14 @@ describe('GlobalMemoryTool::tool metadata', function (): void {
             ->toContain('my_memory');
     });
 
-    it('list/get/save auto-approve; delete and replace require approval', function (): void {
+    it('list/get/save/replace auto-approve; delete requires approval', function (): void {
         $tool = new GlobalMemoryTool();
 
         expect($tool->requiresApprovalByDefault('list'))->toBeFalse()
             ->and($tool->requiresApprovalByDefault('get'))->toBeFalse()
             ->and($tool->requiresApprovalByDefault('save'))->toBeFalse()
-            ->and($tool->requiresApprovalByDefault('delete'))->toBeTrue()
-            ->and($tool->requiresApprovalByDefault('replace'))->toBeTrue();
+            ->and($tool->requiresApprovalByDefault('replace'))->toBeFalse()
+            ->and($tool->requiresApprovalByDefault('delete'))->toBeTrue();
     });
 });
 
