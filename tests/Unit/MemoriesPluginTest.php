@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use DI\ContainerBuilder;
+use Spora\Events\ContainerBuildingEvent;
+use Spora\Events\RoutesRegisteringEvent;
 use Spora\Plugins\Memories\Http\AgentMemoryController;
 use Spora\Plugins\Memories\Http\MemoryController;
 use Spora\Plugins\Memories\MemoriesApp;
@@ -12,6 +14,7 @@ use Spora\Plugins\Memories\Services\MemoryQueryInterface;
 use Spora\Plugins\Memories\Tools\AgentMemoryTool;
 use Spora\Plugins\Memories\Tools\GlobalMemoryTool;
 use Spora\Services\PrincipalService;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 
 it('advertises the plugin as the app\'s display name', function (): void {
     $plugin = new MemoriesPlugin();
@@ -89,18 +92,18 @@ it('subscribes to ContainerBuildingEvent and RoutesRegisteringEvent', function (
     $events = MemoriesPlugin::getSubscribedEvents();
 
     expect($events)->toBe([
-        Spora\Events\ContainerBuildingEvent::class => 'onContainerBuilding',
-        Spora\Events\RoutesRegisteringEvent::class => 'onRoutesRegistering',
+        ContainerBuildingEvent::class => 'onContainerBuilding',
+        RoutesRegisteringEvent::class => 'onRoutesRegistering',
     ]);
 });
 
-it('onContainerBuilding wires the two service interfaces to their concrete implementations', function (): void {
+it('onContainerBuilding wires all 7 DI bindings', function (): void {
     $builder = new ContainerBuilder();
     $builder->useAutowiring(true);
 
-    $dispatcher = new Symfony\Component\EventDispatcher\EventDispatcher();
+    $dispatcher = new EventDispatcher();
     $dispatcher->addSubscriber(new MemoriesPlugin());
-    $dispatcher->dispatch(new Spora\Events\ContainerBuildingEvent($builder));
+    $dispatcher->dispatch(new ContainerBuildingEvent($builder));
 
     $container = $builder->build();
 
@@ -108,5 +111,7 @@ it('onContainerBuilding wires the two service interfaces to their concrete imple
         ->and($container->has(MemoryCommandInterface::class))->toBeTrue()
         ->and($container->has(MemoryController::class))->toBeTrue()
         ->and($container->has(AgentMemoryController::class))->toBeTrue()
+        ->and($container->has(AgentMemoryTool::class))->toBeTrue()
+        ->and($container->has(GlobalMemoryTool::class))->toBeTrue()
         ->and($container->has(PrincipalService::class))->toBeTrue();
 });

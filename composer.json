@@ -7,7 +7,8 @@
         "php": "^8.4.1",
         "ramsey/uuid": "^4.7",
         "spora-ai/spora-core": ">=0.22.0 <2.0.0",
-        "spora-ai/spora-plugin-memories-frontend": ">=0.1.0 <2.0.0"
+        "spora-ai/spora-plugin-memories-frontend": ">=0.1.0 <2.0.0",
+        "symfony/event-dispatcher": "^8.0"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.94",
@@ -30,6 +31,7 @@
     "scripts": {
         "test": "pest",
         "test:parallel": "pest --parallel --processes=auto --max-batch-size=50",
+        "test:coverage:clover": "XDEBUG_MODE=coverage pest --coverage-clover=coverage.xml --parallel --processes=auto --max-batch-size=50",
         "analyse": "phpstan analyse --no-progress --memory-limit=512M",
         "lint": "php-cs-fixer fix --dry-run --diff --no-interaction",
         "format": "php-cs-fixer fix --no-interaction"
