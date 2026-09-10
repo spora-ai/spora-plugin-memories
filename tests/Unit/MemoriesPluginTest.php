@@ -3,8 +3,11 @@
 declare(strict_types=1);
 
 use DI\ContainerBuilder;
+use Spora\Core\MiddlewareRouteCollector;
 use Spora\Events\ContainerBuildingEvent;
 use Spora\Events\RoutesRegisteringEvent;
+use Spora\Http\Middleware\AuthMiddleware;
+use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\Memories\Http\AgentMemoryController;
 use Spora\Plugins\Memories\Http\MemoryController;
 use Spora\Plugins\Memories\MemoriesApp;
@@ -115,3 +118,46 @@ it('onContainerBuilding wires all 7 DI bindings', function (): void {
         ->and($container->has(GlobalMemoryTool::class))->toBeTrue()
         ->and($container->has(PrincipalService::class))->toBeTrue();
 });
+
+it('onRoutesRegistering registers 14 routes behind Auth + Csrf', function (): void {
+    $routes = new MiddlewareRouteCollector(new FastRoute\RouteParser\Std(), new FastRoute\DataGenerator\GroupCountBased());
+
+    (new MemoriesPlugin())->onRoutesRegistering(new RoutesRegisteringEvent($routes));
+
+    $reflection = new ReflectionClass($routes);
+    $dataGen = $reflection->getProperty('dataGenerator');
+    $generator = $dataGen->getValue($routes);
+
+    $genReflection = new ReflectionClass($generator);
+
+    $staticRoutes = $genReflection->getProperty('staticRoutes');
+    $staticRouteMap = $staticRoutes->getValue($generator);
+
+    $variableRoutes = $genReflection->getProperty('methodToRegexToRoutesMap');
+    $variableRouteMap = $variableRoutes->getValue($generator);
+
+    $staticCount = array_sum(array_map('count', $staticRouteMap));
+    $variableCount = array_sum(array_map('count', $variableRouteMap));
+
+    expect($staticCount + $variableCount)->toBe(14);
+
+    $replaceRoute = findRoute($variableRouteMap, '#/api/v1/memories/\(\[\^/\]\+\)/replace#');
+    expect($replaceRoute)->not->toBeNull()
+        ->and($replaceRoute->handler)->toBe([
+            'handler' => [MemoryController::class, 'replace'],
+            'middleware' => [AuthMiddleware::class, CsrfMiddleware::class],
+        ]);
+});
+
+function findRoute(array $routeMap, string $regexPattern): ?FastRoute\Route
+{
+    foreach ($routeMap as $routes) {
+        foreach ($routes as $route) {
+            if (preg_match($regexPattern, $route->regex) === 1) {
+                return $route;
+            }
+        }
+    }
+
+    return null;
+}
