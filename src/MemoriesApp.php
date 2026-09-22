@@ -36,6 +36,11 @@ final class MemoriesApp implements VueAppInterface
         return 'brain';
     }
 
+    public function accent(): string
+    {
+        return 'emerald';
+    }
+
     public function entry(): string
     {
         return 'main.js';
