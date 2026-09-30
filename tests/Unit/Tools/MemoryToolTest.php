@@ -809,3 +809,55 @@ describe('Principal isolation', function (): void {
         expect($result->content)->not->toContain('user1_agent_memory');
     });
 });
+
+describe('principal resolution', function (): void {
+    it('returns a failure result when no PrincipalContext is supplied', function (): void {
+        [, $agentId, ] = createMemoryToolTestUser('nocontext@example.com');
+        $tool = new GlobalMemoryTool();
+
+        $result = $tool->execute(['action' => 'list'], $agentId, 4242);
+
+        // Asserted on the message rather than on the absence of a `trace` key:
+        // `ToolResult::$data` is null by construction here, and `trace` is only
+        // ever attached by the Orchestrator's catch, which is not in this stack
+        // — so a `not->toHaveKey('trace')` assertion passes without proving
+        // anything. Reaching this line at all is the non-throwing proof.
+        expect($result->success)->toBeFalse()
+            ->and($result->content)->toContain('no PrincipalContext');
+    });
+
+    it('does not fall back to the runner user id for either scope', function (): void {
+        [$userId, $agentId, $principalId] = createMemoryToolTestUser('runnerfallback@example.com');
+
+        // A memory owned by this user's real principal must not be reachable
+        // when the call carries the same number in the userId slot only.
+        Memory::create([
+            'principal_id' => $principalId,
+            'agent_id'     => $agentId,
+            'scope'        => 'global',
+            'type'         => 'context',
+            'name'         => 'owned_by_real_principal',
+            'content'      => 'secret',
+        ]);
+
+        foreach ([new AgentMemoryTool(), new GlobalMemoryTool()] as $tool) {
+            $result = $tool->execute(['action' => 'list'], $agentId, $principalId);
+            expect($result->success)->toBeFalse()
+                ->and($result->content)->toContain('no PrincipalContext');
+        }
+    });
+
+    it('still succeeds when a PrincipalContext is present', function (): void {
+        [, $agentId, $principalId] = createMemoryToolTestUser('withcontext@example.com');
+
+        $result = (new GlobalMemoryTool())->execute(
+            ['action' => 'list'],
+            $agentId,
+            null,
+            null,
+            principalContextFor($principalId),
+        );
+
+        expect($result->success)->toBeTrue();
+    });
+});

@@ -48,9 +48,26 @@ abstract class AbstractMemoryTool extends AbstractTool
     ): ToolResult {
         $operation = $this->getOperationName($arguments);
         $scope = $this->getScope();
-        $principalId = $context !== null ? $context->principalId : ($userId ?? throw new MemoryValidationException(
-            'Cannot resolve principal id for memory tool execution: no PrincipalContext and no legacy userId fallback.',
-        ));
+
+        // The guard is unconditional even though agent scope keys rows by
+        // `agentId` and never reads this: a single fail-closed branch beats
+        // one per scope, and the agent-scoped paths already have `$agentId`.
+        //
+        // For global scope the principal is the only thing that scopes a row
+        // and is not derivable from anything else on this call. `$userId` is
+        // the *runner* — whoever clicked — not the owner, so substituting it
+        // would read and write across `principals.id == users.id`, a
+        // cross-tenant match. Return a failure rather than throwing:
+        // `ToolInterface::execute()` is contractually non-throwing, and
+        // Orchestrator's catch would attach a stack trace to what the LLM
+        // reads.
+        if ($context === null) {
+            return new ToolResult(
+                false,
+                'Cannot scope a memory: no PrincipalContext was supplied. This is a plugin integration error, not a bad argument.',
+            );
+        }
+        $principalId = $context->principalId;
 
         return match ($operation) {
             'list'    => $this->list($scope, $agentId, $principalId, $arguments),
