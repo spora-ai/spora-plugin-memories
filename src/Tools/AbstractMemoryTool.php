@@ -49,18 +49,10 @@ abstract class AbstractMemoryTool extends AbstractTool
         $operation = $this->getOperationName($arguments);
         $scope = $this->getScope();
 
-        // The guard is unconditional even though agent scope keys rows by
-        // `agentId` and never reads this: a single fail-closed branch beats
-        // one per scope, and the agent-scoped paths already have `$agentId`.
-        //
-        // For global scope the principal is the only thing that scopes a row
-        // and is not derivable from anything else on this call. `$userId` is
-        // the *runner* — whoever clicked — not the owner, so substituting it
-        // would read and write across `principals.id == users.id`, a
-        // cross-tenant match. Return a failure rather than throwing:
-        // `ToolInterface::execute()` is contractually non-throwing, and
-        // Orchestrator's catch would attach a stack trace to what the LLM
-        // reads.
+        // Fail closed for both scopes, even though agent scope keys rows by
+        // agentId: `$userId` is the runner, not the owner, and `users.id` can
+        // coincide with another tenant's `principals.id`. Returned rather than
+        // thrown — `ToolInterface::execute()` must not throw.
         if ($context === null) {
             return new ToolResult(
                 false,

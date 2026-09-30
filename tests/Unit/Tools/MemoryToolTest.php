@@ -812,25 +812,19 @@ describe('Principal isolation', function (): void {
 
 describe('principal resolution', function (): void {
     it('returns a failure result when no PrincipalContext is supplied', function (): void {
-        [, $agentId, ] = createMemoryToolTestUser('nocontext@example.com');
+        [, $agentId] = createMemoryToolTestUser('nocontext@example.com');
         $tool = new GlobalMemoryTool();
 
         $result = $tool->execute(['action' => 'list'], $agentId, 4242);
 
-        // Asserted on the message rather than on the absence of a `trace` key:
-        // `ToolResult::$data` is null by construction here, and `trace` is only
-        // ever attached by the Orchestrator's catch, which is not in this stack
-        // — so a `not->toHaveKey('trace')` assertion passes without proving
-        // anything. Reaching this line at all is the non-throwing proof.
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain('no PrincipalContext');
     });
 
     it('does not fall back to the runner user id for either scope', function (): void {
-        [$userId, $agentId, $principalId] = createMemoryToolTestUser('runnerfallback@example.com');
+        [, $agentId, $principalId] = createMemoryToolTestUser('runnerfallback@example.com');
 
-        // A memory owned by this user's real principal must not be reachable
-        // when the call carries the same number in the userId slot only.
+        // Canary: under the old fallback this call would have listed the row below.
         Memory::create([
             'principal_id' => $principalId,
             'agent_id'     => $agentId,
