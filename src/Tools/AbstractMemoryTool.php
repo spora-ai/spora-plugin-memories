@@ -39,6 +39,9 @@ abstract class AbstractMemoryTool extends AbstractTool
 {
     abstract protected function getScope(): string;
 
+    /**
+     * @param int|null $userId @deprecated pass $context->ownerUserId instead; removed from the interface in core 0.30.0.
+     */
     public function execute(
         array $arguments,
         int $agentId,
@@ -50,7 +53,7 @@ abstract class AbstractMemoryTool extends AbstractTool
         $scope = $this->getScope();
 
         // Fail closed for both scopes, even though agent scope keys rows by
-        // agentId: `$userId` is the runner, not the owner, and `users.id` can
+        // agentId: a user id is not a principal id, and `users.id` can
         // coincide with another tenant's `principals.id`. Returned rather than
         // thrown — `ToolInterface::execute()` must not throw.
         if ($context === null) {
