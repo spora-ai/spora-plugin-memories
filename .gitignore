@@ -11,5 +11,8 @@
 .phpstan-cache/
 /:memory:
 /plugins/
+# Composer install artifact: SporaPluginFrontendInstaller copies the
+# frontend bundle here from the required -frontend package.
+/public/
 
 /tmp/
