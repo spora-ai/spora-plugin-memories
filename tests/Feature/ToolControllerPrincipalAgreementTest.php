@@ -143,7 +143,6 @@ describe('Tool/Controller agreement :: global memory', function (): void {
             ],
             $f['agentId'],
             null,
-            null,
             principalContextForPrincipal($f['groupPrincipal'], $f['owner']['userId']),
         );
 
@@ -180,7 +179,6 @@ describe('Tool/Controller agreement :: global memory', function (): void {
             ],
             $f['agentId'],
             null,
-            null,
             principalContextForPrincipal($f['groupPrincipal'], $f['owner']['userId']),
         );
 
@@ -206,7 +204,6 @@ describe('Tool/Controller agreement :: global memory', function (): void {
                 'content' => 'Group-only, outsider must not see.',
             ],
             $f['agentId'],
-            null,
             null,
             principalContextForPrincipal($f['groupPrincipal'], $f['owner']['userId']),
         );
@@ -248,7 +245,6 @@ describe('Tool/Controller agreement :: agent memory', function (): void {
             ],
             $f['agentId'],
             null,
-            null,
             principalContextForPrincipal($f['groupPrincipal'], $f['owner']['userId']),
         );
 
@@ -284,7 +280,6 @@ describe('Tool/Controller agreement :: agent memory', function (): void {
                 'content' => 'Group-only.',
             ],
             $f['agentId'],
-            null,
             null,
             principalContextForPrincipal($f['groupPrincipal'], $f['owner']['userId']),
         );
@@ -336,7 +331,6 @@ describe('Tool/Controller agreement :: reads flow back', function (): void {
             ['action' => 'list'],
             $f['agentId'],
             null,
-            null,
             principalContextForPrincipal($f['groupPrincipal'], $f['owner']['userId']),
         );
         expect($toolList->content)->toContain('controller-group-note');
@@ -348,7 +342,6 @@ describe('Tool/Controller agreement :: reads flow back', function (): void {
                 'type'   => 'documentation',
             ],
             $f['agentId'],
-            null,
             null,
             principalContextForPrincipal($f['groupPrincipal'], $f['owner']['userId']),
         );

@@ -75,7 +75,7 @@ describe('AgentMemoryTool::list action', function (): void {
         [, $agentId, $principalId] = createMemoryToolTestUser();
         $tool = new AgentMemoryTool();
 
-        $result = $tool->execute(['action' => 'list'], $agentId, null, null, principalContextFor($principalId));
+        $result = $tool->execute(['action' => 'list'], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('No memories found')
@@ -106,7 +106,7 @@ describe('AgentMemoryTool::list action', function (): void {
             'content'      => 'Other content',
         ]);
 
-        $result = $tool->execute(['action' => 'list'], $agentId, null, null, principalContextFor($principalId));
+        $result = $tool->execute(['action' => 'list'], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('my_memory')
@@ -129,7 +129,7 @@ describe('AgentMemoryTool::save action', function (): void {
             'content' => '# Project Notes\n\nThese are the project notes.',
             'summary' => 'Project notes summary',
             'order'   => 5,
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('Created memory [project_notes]')
@@ -162,7 +162,7 @@ describe('AgentMemoryTool::save action', function (): void {
             'name'    => 'updatable',
             'type'    => 'context',
             'content' => 'Updated content',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('Updated memory [updatable]');
@@ -182,7 +182,7 @@ describe('AgentMemoryTool::save action', function (): void {
             'name'    => 'auto_summary',
             'type'    => 'context',
             'content' => $longContent,
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         $memory = Memory::where('name', 'auto_summary')->first();
         expect($memory->summary)->not->toBeNull()
@@ -198,7 +198,7 @@ describe('AgentMemoryTool::save action', function (): void {
             'action'  => 'save',
             'type'    => 'context',
             'content' => 'Some content without a name',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain(MEM_ERR_NAME_REQUIRED);
@@ -212,7 +212,7 @@ describe('AgentMemoryTool::save action', function (): void {
             'action'  => 'save',
             'name'    => 'X',
             'content' => 'body',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain('type is required');
@@ -227,7 +227,7 @@ describe('AgentMemoryTool::save action', function (): void {
             'name'    => 'X',
             'type'    => 'mystery',
             'content' => 'body',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain("type 'mystery' is not one of");
@@ -255,7 +255,7 @@ describe('AgentMemoryTool::get action', function (): void {
             'action' => 'get',
             'name'   => 'get_test',
             'type'   => 'context',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('# Get Test Content')
@@ -267,7 +267,7 @@ describe('AgentMemoryTool::get action', function (): void {
         [, $agentId, $principalId] = createMemoryToolTestUser();
         $tool = new AgentMemoryTool();
 
-        $result = $tool->execute(['action' => 'get', 'type' => 'context'], $agentId, null, null, principalContextFor($principalId));
+        $result = $tool->execute(['action' => 'get', 'type' => 'context'], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain(MEM_ERR_NAME_REQUIRED);
@@ -277,7 +277,7 @@ describe('AgentMemoryTool::get action', function (): void {
         [, $agentId, $principalId] = createMemoryToolTestUser();
         $tool = new AgentMemoryTool();
 
-        $result = $tool->execute(['action' => 'get', 'name' => 'X'], $agentId, null, null, principalContextFor($principalId));
+        $result = $tool->execute(['action' => 'get', 'name' => 'X'], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain('type is required');
@@ -291,7 +291,7 @@ describe('AgentMemoryTool::get action', function (): void {
             'action' => 'get',
             'name'   => 'nonexistent',
             'type'   => 'context',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain(MEM_ERR_NOT_FOUND);
@@ -318,7 +318,7 @@ describe('AgentMemoryTool::delete action', function (): void {
             'action' => 'delete',
             'name'   => 'to_delete',
             'type'   => 'context',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('Deleted memory [to_delete]');
@@ -330,7 +330,7 @@ describe('AgentMemoryTool::delete action', function (): void {
         [, $agentId, $principalId] = createMemoryToolTestUser();
         $tool = new AgentMemoryTool();
 
-        $result = $tool->execute(['action' => 'delete', 'type' => 'context'], $agentId, null, null, principalContextFor($principalId));
+        $result = $tool->execute(['action' => 'delete', 'type' => 'context'], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain(MEM_ERR_NAME_REQUIRED);
@@ -344,7 +344,7 @@ describe('AgentMemoryTool::delete action', function (): void {
             'action' => 'delete',
             'name'   => 'nonexistent',
             'type'   => 'context',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain(MEM_ERR_NOT_FOUND);
@@ -373,7 +373,7 @@ describe('AgentMemoryTool::replace action', function (): void {
             'type'     => 'documentation',
             'find'     => 'write tests',
             'new_text' => 'write tests (done)',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('Replaced 1 occurrence');
@@ -401,7 +401,7 @@ describe('AgentMemoryTool::replace action', function (): void {
             'type'     => 'documentation',
             'find'     => 'missing',
             'new_text' => 'X',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain('matches 0 occurrences');
@@ -426,7 +426,7 @@ describe('AgentMemoryTool::replace action', function (): void {
             'type'     => 'documentation',
             'find'     => 'foo',
             'new_text' => 'bar',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain('matches 3');
@@ -444,7 +444,7 @@ describe('AgentMemoryTool::invalid action', function (): void {
         [, $agentId, $principalId] = createMemoryToolTestUser();
         $tool = new AgentMemoryTool();
 
-        $result = $tool->execute(['action' => 'invalid_action'], $agentId, null, null, principalContextFor($principalId));
+        $result = $tool->execute(['action' => 'invalid_action'], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain('Invalid action');
@@ -490,7 +490,7 @@ describe('GlobalMemoryTool::list action', function (): void {
         [, $agentId, $principalId] = createMemoryToolTestUser();
         $tool = new GlobalMemoryTool();
 
-        $result = $tool->execute(['action' => 'list'], $agentId, null, null, principalContextFor($principalId));
+        $result = $tool->execute(['action' => 'list'], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('No memories found')
@@ -518,7 +518,7 @@ describe('GlobalMemoryTool::list action', function (): void {
             'content'      => 'Agent-only content',
         ]);
 
-        $result = $tool->execute(['action' => 'list'], $agentId, null, null, principalContextFor($principalId));
+        $result = $tool->execute(['action' => 'list'], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('global_pref')
@@ -539,7 +539,7 @@ describe('GlobalMemoryTool::save action', function (): void {
             'type'    => 'context',
             'content' => 'Our company policy is to be excellent.',
             'summary' => 'Company policy',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('Created memory [company_policy]')
@@ -568,7 +568,7 @@ describe('GlobalMemoryTool::save action', function (): void {
             'name'    => 'global_update',
             'type'    => 'context',
             'content' => 'Updated global content',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('Updated memory [global_update]');
@@ -598,7 +598,7 @@ describe('GlobalMemoryTool::get action', function (): void {
             'action' => 'get',
             'name'   => 'global_get',
             'type'   => 'context',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('# Global Get')
@@ -623,7 +623,7 @@ describe('GlobalMemoryTool::get action', function (): void {
             'action' => 'get',
             'name'   => 'agent_scoped_get',
             'type'   => 'context',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain(MEM_ERR_NOT_FOUND);
@@ -649,7 +649,7 @@ describe('GlobalMemoryTool::delete action', function (): void {
             'action' => 'delete',
             'name'   => 'global_delete',
             'type'   => 'context',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue()
             ->and($result->content)->toContain('Deleted memory [global_delete]');
@@ -677,7 +677,7 @@ describe('GlobalMemoryTool::delete action', function (): void {
             'content'      => 'Agent version',
         ]);
 
-        $tool->execute(['action' => 'delete', 'name' => 'shared_name', 'type' => 'context'], $agentId, null, null, principalContextFor($principalId));
+        $tool->execute(['action' => 'delete', 'name' => 'shared_name', 'type' => 'context'], $agentId, null, principalContextFor($principalId));
 
         expect(Memory::where('name', 'shared_name')->whereNull('agent_id')->first())->toBeNull();
         expect(Memory::where('name', 'shared_name')->where('agent_id', $agentId)->first())->not->toBeNull();
@@ -705,7 +705,7 @@ describe('GlobalMemoryTool::replace action', function (): void {
             'type'     => 'documentation',
             'find'     => 'phase 2: draft',
             'new_text' => 'phase 2: copy edit',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeTrue();
 
@@ -731,7 +731,7 @@ describe('GlobalMemoryTool::replace action', function (): void {
             'type'     => 'documentation',
             'find'     => 'x',
             'new_text' => 'y',
-        ], $agentId, null, null, principalContextFor($principalId));
+        ], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain('matches 3');
@@ -744,7 +744,7 @@ describe('GlobalMemoryTool::invalid action', function (): void {
         [, $agentId, $principalId] = createMemoryToolTestUser();
         $tool = new GlobalMemoryTool();
 
-        $result = $tool->execute(['action' => 'hack'], $agentId, null, null, principalContextFor($principalId));
+        $result = $tool->execute(['action' => 'hack'], $agentId, null, principalContextFor($principalId));
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain('Invalid action');
@@ -778,7 +778,7 @@ describe('Principal isolation', function (): void {
         ]);
 
         $tool = new GlobalMemoryTool();
-        $result = $tool->execute(['action' => 'list'], $agentId2, null, null, principalContextFor($principalId2));
+        $result = $tool->execute(['action' => 'list'], $agentId2, null, principalContextFor($principalId2));
 
         expect($result->content)->not->toContain('user1_private');
     });
@@ -804,7 +804,7 @@ describe('Principal isolation', function (): void {
         ]);
 
         $tool = new AgentMemoryTool();
-        $result = $tool->execute(['action' => 'list'], $agentId2, null, null, principalContextFor($principalId2));
+        $result = $tool->execute(['action' => 'list'], $agentId2, null, principalContextFor($principalId2));
 
         expect($result->content)->not->toContain('user1_agent_memory');
     });
@@ -815,16 +815,19 @@ describe('principal resolution', function (): void {
         [, $agentId] = createMemoryToolTestUser('nocontext@example.com');
         $tool = new GlobalMemoryTool();
 
-        $result = $tool->execute(['action' => 'list'], $agentId, 4242);
+        $result = $tool->execute(['action' => 'list'], $agentId);
 
         expect($result->success)->toBeFalse()
             ->and($result->content)->toContain('no PrincipalContext');
     });
 
-    it('does not fall back to the runner user id for either scope', function (): void {
+    it('fails closed for either scope when no PrincipalContext is supplied', function (): void {
         [, $agentId, $principalId] = createMemoryToolTestUser('runnerfallback@example.com');
 
-        // Canary: under the old fallback this call would have listed the row below.
+        // The row below must stay unlisted, but there is no longer a decoy to plant:
+        // `execute()` has no $userId slot, so a fallback to one is no longer
+        // expressible here. What this now pins is the fail-closed half - the row
+        // exists and both scopes still refuse to list it without a context.
         Memory::create([
             'principal_id' => $principalId,
             'agent_id'     => $agentId,
@@ -835,7 +838,7 @@ describe('principal resolution', function (): void {
         ]);
 
         foreach ([new AgentMemoryTool(), new GlobalMemoryTool()] as $tool) {
-            $result = $tool->execute(['action' => 'list'], $agentId, $principalId);
+            $result = $tool->execute(['action' => 'list'], $agentId);
             expect($result->success)->toBeFalse()
                 ->and($result->content)->toContain('no PrincipalContext');
         }
@@ -847,7 +850,6 @@ describe('principal resolution', function (): void {
         $result = (new GlobalMemoryTool())->execute(
             ['action' => 'list'],
             $agentId,
-            null,
             null,
             principalContextFor($principalId),
         );
