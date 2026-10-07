@@ -12,21 +12,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-# Cross-PR dependency: spora-plugin-memories#3 wraps every memory write in
-# `Spora\Services\Text\Utf8Sanitizer`, which originally lived on
-# spora-core#160's branch `feat/utf8-sanitizer`. That PR has since
-# merged (spora-core @ `42d7f7f`), so the override defaults to `main`.
-# Keep the env var so future cross-PR experiments can flip the branch
-# without editing the workflow file.
-#
-# The override installs spora-core from the chosen ref during CI only —
-# composer.json and composer.lock are mutated ephemerally on the runner
-# and never committed. The `composer require --no-update` step (not
-# `composer update` alone) pins the alias so downstream `composer
-# install` calls don't drift.
-env:
-  SPORA_CORE_REF: main
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -51,14 +36,8 @@ jobs:
           coverage: none
           tools: composer
 
-      # Install spora-core from the env-pinned ref so cross-PR
-      # dependencies land together. composer.json / composer.lock are
-      # mutated only on the runner (ephemeral) — nothing is committed.
-      - name: Install spora-core from ${{ env.SPORA_CORE_REF }}
-        run: |
-          composer require --no-interaction --no-update \
-            "spora-ai/spora-core:dev-${{ env.SPORA_CORE_REF }} as 0.12.0"
-          composer update --no-interaction --no-progress spora-ai/spora-core
+      - name: Composer update spora-core
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Run Pest
         run: ./vendor/bin/pest
@@ -77,11 +56,8 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Install spora-core from ${{ env.SPORA_CORE_REF }}
-        run: |
-          composer require --no-interaction --no-update \
-            "spora-ai/spora-core:dev-${{ env.SPORA_CORE_REF }} as 0.12.0"
-          composer update --no-interaction --no-progress spora-ai/spora-core
+      - name: Composer update spora-core
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Run PHPStan
         # Match composer.json's "analyse" script so the 512M memory limit is used;
@@ -102,11 +78,8 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Install spora-core from ${{ env.SPORA_CORE_REF }}
-        run: |
-          composer require --no-interaction --no-update \
-            "spora-ai/spora-core:dev-${{ env.SPORA_CORE_REF }} as 0.12.0"
-          composer update --no-interaction --no-progress spora-ai/spora-core
+      - name: Composer update spora-core
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Check code style
         # Same ruleset as Spora core's .php-cs-fixer.php so plugin style matches host.
@@ -130,11 +103,8 @@ jobs:
           coverage: xdebug
           tools: composer
 
-      - name: Install spora-core from ${{ env.SPORA_CORE_REF }}
-        run: |
-          composer require --no-interaction --no-update \
-            "spora-ai/spora-core:dev-${{ env.SPORA_CORE_REF }} as 0.12.0"
-          composer update --no-interaction --no-progress spora-ai/spora-core
+      - name: Composer update spora-core
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Generate clover coverage report
         run: ./vendor/bin/pest --coverage-clover=coverage.xml --coverage-filter=src
