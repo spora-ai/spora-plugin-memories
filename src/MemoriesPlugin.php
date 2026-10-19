@@ -163,4 +163,33 @@ final class MemoriesPlugin extends AbstractPlugin implements EventSubscriberInte
     {
         return [__DIR__ . '/../agent-templates'];
     }
+
+    /**
+     * Translation catalogues this plugin ships, declared through
+     * {@see \Spora\Plugins\PluginInterface::translationsPaths()}.
+     *
+     * Keys are the English source text — `de.json` reads
+     * `{"Agent Memory": "Agentengedächtnis"}`, not `{"tool": "…"}`. That is
+     * what makes the host's `i18n:check` able to fail when a string is
+     * edited without being re-translated: the key changes and the old
+     * entry orphans.
+     *
+     * **Only operator copy belongs in here.** A string the model reads is
+     * never translated: both `#[Tool].description` values and every
+     * `#[ToolOperation].description` go into the LLM function definition.
+     * This plugin declares no `#[ToolSetting]`, so `locales/de.json` holds
+     * the two tool display names plus the app's display name and
+     * description — all four operator-only.
+     *
+     * Requires `spora-core >= 0.31.0` at runtime; older versions fail to
+     * resolve the method when the loader is strict.
+     *
+     * @return string[]
+     */
+    public function translationsPaths(): array
+    {
+        return [
+            __DIR__ . '/../locales',
+        ];
+    }
 }
