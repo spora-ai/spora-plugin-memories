@@ -2,5 +2,6 @@
   "Memories": "Erinnerungen",
   "Persistent memory storage for agents and users.": "Dauerhafter Speicher für Erinnerungen von Agenten und Benutzern.",
   "Agent Memory": "Agentengedächtnis",
-  "Global Memory": "Globales Gedächtnis"
+  "Global Memory": "Globales Gedächtnis",
+  "Persistent memory storage for agents and users. Ships the Memories admin panel + memory/global_memory tools.": "Dauerhafter Speicher für Agenten und Benutzer. Liefert das Memories-Administrationspanel sowie die Tools `memory` und `global_memory`."
 }
