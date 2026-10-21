@@ -15,19 +15,12 @@ use Spora\Models\Principal;
 /**
  * Eloquent model for the `memories` table.
  *
- * Lives at `Spora\Plugins\Memories\Models\Memory` — the plugin's PSR-4
- * namespace — so the autoloader can find it via the standard
- * `Spora\Plugins\Memories\` => `src/` mapping. The {@see Agent} and
- * {@see Principal} FK targets stay in core's `Spora\Models\` namespace
- * (that's where the Eloquent relationship resolves), and the plugin's
- * {@see \Spora\Plugins\Memories\MemoriesPlugin::migrationsPath()} ships the
- * table's create statement with the plugin-slug-prefixed filename.
+ * The FK targets ({@see Agent}, {@see Principal}) stay in core's `Spora\Models\`
+ * namespace — that is where the Eloquent relationships resolve.
  *
- * The HasUuids trait is overridden so we mint UUIDv7 (time-ordered) rather
- * than the trait's default UUIDv4 — v7 keeps newly-created memories
- * adjacent in B-tree indexes and in API listing order, which matters for
- * the editorial workflows the plugin now supports (plan / documentation /
- * examples / context).
+ * Ids are UUIDv7 (time-ordered) rather than v4: newly created memories stay
+ * adjacent in the B-tree index and in listing order, which the editorial
+ * workflows depend on.
  *
  * @property string $id
  * @property int|null $principal_id
@@ -77,15 +70,14 @@ final class Memory extends Model
     ];
 
     /**
-     * UUIDv7 (time-ordered). Returned to HasUuids via its internal
-     * `newUniqueId()` resolution.
+     * UUIDv7 (time-ordered).
      *
      * Forward-compat pin: Laravel 13.x's {@see HasUuids::newUniqueId()}
      * already returns `(string) Str::uuid7()`, so this override is
-     * technically redundant on the current dep. Kept as an explicit pin
-     * in case a future trait bump flips the default back to v4 (or
-     * shifts to v8) — the plugin's editorial workflows depend on v7's
-     * chronological ordering.
+     * technically redundant on the current dep. Kept as an explicit pin in
+     * case a future trait bump flips the default back to v4 (or shifts to
+     * v8) — the plugin's editorial workflows depend on v7's chronological
+     * ordering.
      */
     public function newUniqueId(): string
     {

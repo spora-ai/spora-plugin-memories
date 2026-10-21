@@ -5,13 +5,11 @@ declare(strict_types=1);
 namespace Spora\Plugins\Memories\Services;
 
 /**
- * Validation surface for memory payloads. Centralises the document-type
- * enum check and the per-field rules so {@see MemoryCommandService} can
- * stay under Sonar's per-class method-count ceiling.
+ * Validation surface for memory payloads: the document-type enum check and
+ * the per-field rules.
  *
- * Stateless — instantiated per service via property initialisation; no
- * constructor parameters keeps the existing `new MemoryCommandService()`
- * call sites in the test suite working unchanged.
+ * Stateless and constructor-less: the command service creates the validator
+ * inline, so `new MemoryCommandService()` keeps working.
  */
 final class MemoryValidator
 {

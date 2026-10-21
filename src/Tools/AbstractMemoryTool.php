@@ -18,15 +18,14 @@ use Spora\Tools\ValueObjects\ToolResult;
  * replace operations. Subclasses define the scope (agent or global) via
  * getScope().
  *
- * Extending AbstractTool gives the subclasses (AgentMemoryTool, GlobalMemoryTool)
- * the auto-generated parameter schema for free — they only need their own
- * #[Tool] declaration and an implementation of getScope().
+ * Extending AbstractTool gives the subclasses the auto-generated parameter
+ * schema for free — they only need their own `#[Tool]` declaration and an
+ * implementation of getScope().
  *
- * Every memory written by this tool is attributed to the principal id on
- * `PrincipalContext` (resolved upstream by the host). For global scope that
- * is the user-principal; for agent scope it is the agent's owning principal.
- * Agents that travel between principals (0067 transfer flow) keep their
- * agent memories because the agent FK never changes.
+ * A global memory is attributed to the `principalId` on `PrincipalContext` —
+ * the principal the host resolved for the agent. An agent memory is keyed by
+ * `agent_id`, so it travels with the agent across principal transfers (0067
+ * transfer flow) because the agent FK never changes.
  */
 #[ToolParameter(name: 'name', type: 'string', description: 'Unique name for the memory (e.g. "user_preferences", "project_context").', required: ['get', 'save', 'delete', 'replace'])]
 #[ToolParameter(name: 'type', type: 'string', description: "Document type: 'plan', 'documentation', 'examples', or 'context'.", required: ['save', 'replace', 'get', 'delete'], enum: ['plan', 'documentation', 'examples', 'context'])]

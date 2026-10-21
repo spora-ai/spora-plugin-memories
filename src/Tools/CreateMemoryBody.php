@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace Spora\Plugins\Memories\Tools;
 
 /**
- * Body fields for {@see AbstractMemoryTool::createMemory()} — packaged so
- * the creator takes a single value object instead of three loose args
- * (summary / content / order) and Sonar's per-method parameter count
- * stays under the 7-parameter ceiling.
+ * Body fields for {@see AbstractMemoryTool::createMemory()} — one value
+ * object instead of three loose arguments, so the creator stays under
+ * Sonar's 7-parameter ceiling.
  */
 final readonly class CreateMemoryBody
 {

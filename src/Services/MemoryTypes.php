@@ -4,14 +4,6 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Memories\Services;
 
-/**
- * Canonical home for memory-domain enums and error-code constants.
- *
- * Lives in its own file so controllers and the HTTP layer can import a
- * single namespace without dragging in the service class — and so the
- * SonarQube `MemoryService` class doesn't keep a dozen constants hanging
- * off it after the service split.
- */
 final class MemoryTypes
 {
     /** @var list<string> */

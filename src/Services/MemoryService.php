@@ -7,24 +7,15 @@ namespace Spora\Plugins\Memories\Services;
 /**
  * Backward-compatible constants shim for the v2 service split.
  *
- * The v2 split moved the actual service implementations to
- * {@see MemoryQueryService} and {@see MemoryCommandService}, with the
- * narrow {@see MemoryQueryInterface} / {@see MemoryCommandInterface}
- * contracts and the combined {@see MemoryServiceInterface}. The
- * domain enums and error-code constants were lifted into
- * {@see MemoryTypes} so callers don't have to qualify a service class.
+ * The implementations moved to {@see MemoryQueryService} and
+ * {@see MemoryCommandService}, the domain enums and error codes to
+ * {@see MemoryTypes}. This class carries no methods and exists so external
+ * code that still references `MemoryService::TYPE_NOT_ALLOWED_CODE` keeps
+ * compiling.
  *
- * This class remains as a one-release compat shim that ships with
- * 0.3.0 — external code that still references
- * `MemoryService::TYPE_NOT_ALLOWED_CODE` (or any of the other
- * constants) keeps compiling through this version. The class is final
- * and carries no methods so it doesn't trigger the per-class
- * method-count ceiling; the actual work has moved out to the two new
- * services. Removal is targeted for 0.4.0.
- *
- * @deprecated since 0.2.0 — use {@see MemoryTypes} for constants,
+ * @deprecated use {@see MemoryTypes} for constants,
  *             {@see MemoryQueryService} / {@see MemoryCommandService}
- *             for the implementations. Will be removed in 0.4.0.
+ *             for the implementations.
  */
 final class MemoryService
 {

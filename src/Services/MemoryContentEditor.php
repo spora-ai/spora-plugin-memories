@@ -8,13 +8,10 @@ use Spora\Services\Text\Utf8Sanitizer;
 
 /**
  * String-mutation surface for memory content. Owns the single-occurrence
- * substring replacement rule and the per-field UTF-8 scrub pass so
- * {@see MemoryCommandService} can stay under Sonar's per-class
- * method-count ceiling.
+ * substring replacement rule and the per-field UTF-8 scrub pass.
  *
- * Stateless — instantiated per service via property initialisation; no
- * constructor parameters keeps the existing `new MemoryCommandService()`
- * call sites in the test suite working unchanged.
+ * Stateless and constructor-less: the command service creates it inline, so
+ * `new MemoryCommandService()` keeps working.
  */
 final class MemoryContentEditor
 {

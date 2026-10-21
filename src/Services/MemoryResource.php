@@ -8,9 +8,8 @@ use Spora\Plugins\Memories\Models\Memory;
 
 /**
  * Maps a {@see Memory} Eloquent row to the JSON-friendly array used in
- * HTTP responses and tool results. Lives in its own helper so the
- * query and command services don't carry a duplicate 12-line resource
- * method that Sonar's duplication-density metric would catch.
+ * HTTP responses and tool results. One serialiser, so the query and command
+ * services do not carry a duplicate copy of the mapping.
  */
 final class MemoryResource
 {
