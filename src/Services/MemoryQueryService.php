@@ -13,22 +13,12 @@ use Spora\Services\PrincipalResolver;
  * Read-side service for the memories domain — list + get operations
  * over both principal-scoped (global) and agent-scoped memories.
  *
- * Lives next to {@see MemoryCommandService} after the v2 split so each
- * side stays under Sonar's per-class method-count ceiling.
- *
- * Agent-scoped methods take `$userId` (the calling user, supplied by
- * the controller's auth layer) and pass it straight to
- * {@see PrincipalResolver::isVisibleTo()} so the gate expands to the
- * user's full visible-principal set. The pre-v2.1 implementation used
- * strict `principal_id = $actingPrincipalId` against the caller's
- * personal principal id, which silently 404'd every agent owned by a
- * group the user belongs to. The pre-fix-release-readiness
- * implementation routed through {@see PrincipalResolver::ownerUserId()}
- * to "recover" a user id from the acting principal — wrong, that
- * returned the principal's owner, so any non-owner member of a group
- * could read/write every agent visible to the owner (cross-principal
- * IDOR). See the `GroupVisibilityTest` + `MemoryQueryServiceTest`
- * suites for coverage of both fixes.
+ * Agent-scoped methods take `$userId` (the calling user, supplied by the
+ * controller's auth layer) and pass it straight to
+ * {@see PrincipalResolver::isVisibleTo()}, so the gate expands to the user's
+ * full visible-principal set. Resolving visibility against the *principal's
+ * owner* instead would authorise every non-owner member of a group for every
+ * agent that owner can see.
  */
 final class MemoryQueryService implements MemoryQueryInterface
 {
@@ -93,8 +83,7 @@ final class MemoryQueryService implements MemoryQueryInterface
     /**
      * Validate a document type — exposed here because the list/get paths
      * need it to reject unknown `?type=` query values before hitting the
-     * Eloquent layer. Shared with {@see MemoryCommandService} which
-     * also calls into {@see validateType()} for the same enum.
+     * Eloquent layer.
      */
     public function validateType(string $type): void
     {

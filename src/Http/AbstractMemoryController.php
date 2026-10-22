@@ -22,16 +22,13 @@ use Throwable;
 
 /**
  * Shared surface for principal-scoped (global) and agent-scoped memory
- * controllers. Both siblings target the same Memory domain and only
- * diverge in which service method they call (e.g. `createGlobalMemory`
- * vs `createAgentMemory`) and which URL parameter identifies the
- * target (memory id vs memory id + agent id).
+ * controllers. Both siblings target the same Memory domain and diverge only
+ * in which service method they call and which URL parameters identify the
+ * target.
  *
- * Hoisting the principal/user resolver memoisation, JSON decoder, error
- * envelope factory, and per-op input validation here is what keeps both
- * controllers under Sonar's per-method return-count ceiling and
- * eliminates the duplicated `resolvePrincipalId()` / `decodeJson()` /
- * `error()` / `notFound()` blocks the gate flagged.
+ * The resolver, JSON decoder, error envelope and per-op input validation live
+ * here so the two controllers stay under Sonar's per-method return-count
+ * ceiling instead of each repeating the same blocks.
  */
 abstract class AbstractMemoryController
 {
@@ -48,20 +45,13 @@ abstract class AbstractMemoryController
     ) {}
 
     /**
-     * Resolve the principal id once per request. Both controllers feed
-     * this into the service layer; agent-scoped services then route it
-     * straight through {@see \Spora\Services\PrincipalResolver::isVisibleTo()}
-     * against the calling user id (see {@see requestUserId()}).
+     * Resolve the principal id once per request.
      *
-     * The frontend's `PrincipalChipRow` lets the operator pick which
-     * principal to act as (their own user-principal or any group they
-     * belong to). The selection is sent as `?principal_id=N` on every
-     * request; if it's absent we fall back to the user principal so
-     * callers that don't know about the param keep working. When the
-     * principal id is present but the caller doesn't control it (e.g.
-     * forged by curl), {@see PrincipalNotAccessibleException} surfaces
-     * the rejection as a 403 rather than silently writing under the
-     * wrong scope.
+     * The frontend's `PrincipalChipRow` lets the operator pick which principal
+     * to act as, and sends the choice as `?principal_id=N` on every request.
+     * Absent, the call falls back to the user principal so callers that don't
+     * know the param keep working; present but not controlled by the caller,
+     * it surfaces as a 403 rather than a write under the wrong scope.
      *
      * @throws NotAuthenticatedException When no user is logged in.
      * @throws PrincipalMaterialisationException When the principal row cannot be materialised.
@@ -101,9 +91,9 @@ abstract class AbstractMemoryController
 
     /**
      * Resolve the calling user id once per request. Memoised so repeated
-     * lookups against the auth layer don't hit the session for every
-     * service call. Used by both controllers to feed the agent-scoped
-     * service methods, which now take `$userId` (not `$principalId`) so
+     * lookups don't hit the session for every service call.
+     *
+     * The agent-scoped service methods take `$userId` (not `$principalId`) so
      * {@see \Spora\Services\PrincipalResolver::isVisibleTo()} resolves
      * visibility against the caller — not the principal's owner.
      *
@@ -130,9 +120,9 @@ abstract class AbstractMemoryController
     private static function extractPrincipalIdFromRequest(Request $request): ?int
     {
         $raw = $request->query->get('principal_id');
-        // `query->get()` typically returns string (URL-encoded query)
-        // but Symfony's repeated-key de-dup yields an int for single-
-        // valued URL params. Accept either via numeric coercion.
+        // `query->get()` is typed `string|int|float|bool|null`: a query string
+        // yields a string, a programmatically built Request can hold an int.
+        // Accept either via numeric coercion.
         if ($raw === null || $raw === '') {
             return null;
         }
@@ -160,11 +150,6 @@ abstract class AbstractMemoryController
         }
     }
 
-    /**
-     * Validate that `$type` is one of {@see MemoryTypes::DOCUMENT_TYPES}.
-     * Returns the 422 envelope to return, or null when the type is valid
-     * — collapses the per-call `in_array` / sprintf duplication.
-     */
     protected function validateType(string $type): ?JsonResponse
     {
         if (in_array($type, MemoryTypes::DOCUMENT_TYPES, true)) {
@@ -237,11 +222,8 @@ abstract class AbstractMemoryController
     }
 
     /**
-     * Wrap a `create*` service call: turn the success into a 201
-     * envelope, convert `MemoryValidationException` to a 422 error, and
-     * `AgentNotFoundException` (agent scope) to a 404. The agent-side
-     * exception is harmless when invoked from the global controller —
-     * the global path never throws it.
+     * Wrap a `create*` service call: 201 on success, 422 on a validation
+     * failure, 404 on a missing agent.
      *
      * @return JsonResponse 201 on success, 404 / 422 on the matching failure.
      */
@@ -342,12 +324,6 @@ abstract class AbstractMemoryController
      * Translate the result of a `replace*` service call into the right
      * JSON response — distinguishes the "found and replaced" success from
      * the "memory disappeared" not-found.
-     *
-     * Exception translation lives in {@see translateReplaceFailure()}
-     * so the per-op wrapper in each concrete controller catches and
-     * routes failures through a single helper, mirroring how
-     * {@see translateMemoryFailure()} handles the create/update/reorder
-     * wrappers. `replaceResponse` itself is now Throwable-free.
      *
      * @param array<string, mixed>|null $result Service result, or null when the memory disappeared.
      */

@@ -15,33 +15,21 @@ use Spora\Services\PrincipalResolver;
  * delete, and reorder operations over both principal-scoped (global)
  * and agent-scoped memories.
  *
- * Lives next to {@see MemoryQueryService} after the v2 split so each
- * side stays under Sonar's per-class method-count ceiling. Validation
- * lives in {@see MemoryValidator} and content-string edits in
- * {@see MemoryContentEditor}; this class only orchestrates them.
+ * Agent-scoped methods take `$userId` (the calling user, supplied by the
+ * controller's auth layer) and pass it straight to
+ * {@see PrincipalResolver::isVisibleTo()} so the gate expands to the user's
+ * full visible-principal set. Resolving visibility against the *principal's
+ * owner* instead would authorise every non-owner member of a group for every
+ * agent that owner can see.
  *
- * Agent-scoped methods take `$userId` (the calling user, supplied by
- * the controller's auth layer) and pass it straight to
- * {@see PrincipalResolver::isVisibleTo()} so the gate expands to the
- * user's full visible-principal set. The pre-fix-release-readiness
- * implementation routed through {@see PrincipalResolver::ownerUserId()}
- * against `$principalId`, which returned the principal's owner — a
- * cross-principal IDOR. See the matching rationale on
- * {@see MemoryQueryService} and the regression coverage in
- * `MemoryQueryServiceTest` / `MemoryCommandServiceTest`.
- *
- * Every agent-scoped write throws {@see AgentNotFoundException} when
- * the agent is not visible to the caller — `createAgentMemory` always
- * did; `updateAgentMemory` / `replaceAgentMemory` / `deleteAgentMemory`
- * used to return `null` / `false` and were normalised on the
- * release-readiness pass so the controllers can centralise the 404
+ * Every agent-scoped write throws {@see AgentNotFoundException} when the agent
+ * is not visible to the caller, so the controllers can centralise the 404
  * translation in {@see AbstractMemoryController::translateMemoryFailure()}.
  *
  * `AgentNotFoundException` lives in `Spora\Services\Exceptions\` (a core
- * class) because Agent is a core model — moving the exception to the
- * plugin namespace would force callers outside the plugin to import two
- * namespaces for the same concept. The exception stays in core; this
- * service throws it when the agent for the requested memory is missing.
+ * class) because Agent is a core model — moving it to the plugin namespace
+ * would force callers outside the plugin to import two namespaces for the
+ * same concept.
  */
 final class MemoryCommandService implements MemoryCommandInterface
 {
@@ -263,8 +251,7 @@ final class MemoryCommandService implements MemoryCommandInterface
 
     /**
      * Interface passthrough — delegates to {@see MemoryValidator} so the
-     * enum check lives in one place. Kept on the public surface because
-     * callers (and tests) reach for `$service->validateType(...)`.
+     * enum check lives in one place.
      *
      * @throws Exceptions\MemoryValidationException
      */

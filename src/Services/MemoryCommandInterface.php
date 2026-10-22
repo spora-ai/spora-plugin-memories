@@ -13,7 +13,6 @@ interface MemoryCommandInterface
 {
     /**
      * @param array<string, mixed> $data
-     * @return array
      */
     public function createGlobalMemory(int $principalId, array $data): array;
 
@@ -24,33 +23,28 @@ interface MemoryCommandInterface
      * rationale.
      *
      * @param array<string, mixed> $data
-     * @return array
      * @throws \Spora\Services\Exceptions\AgentNotFoundException When the agent is not visible to the caller.
      */
     public function createAgentMemory(int $agentId, int $userId, int $principalId, array $data): array;
 
     /**
      * @param array<string, mixed> $data
-     * @return array|null
      */
     public function updateGlobalMemory(string $memoryId, int $principalId, array $data): ?array;
 
     /**
      * @param array<string, mixed> $data
-     * @return array|null
      * @throws \Spora\Services\Exceptions\AgentNotFoundException When the agent is not visible to the caller.
      */
     public function updateAgentMemory(string $memoryId, int $agentId, int $userId, int $principalId, array $data): ?array;
 
     /**
      * @param array<string, mixed> $data Must contain `find` and `new_text`.
-     * @return array|null
      */
     public function replaceGlobalMemory(string $memoryId, int $principalId, array $data): ?array;
 
     /**
      * @param array<string, mixed> $data Must contain `find` and `new_text`.
-     * @return array|null
      * @throws \Spora\Services\Exceptions\AgentNotFoundException When the agent is not visible to the caller.
      */
     public function replaceAgentMemory(string $memoryId, int $agentId, int $userId, int $principalId, array $data): ?array;

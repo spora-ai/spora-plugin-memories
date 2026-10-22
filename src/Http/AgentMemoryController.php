@@ -13,18 +13,17 @@ use Throwable;
 /**
  * Handles agent-scoped memory CRUD, reordering, and surgical substring
  * replacement. Agent memories are keyed by `agent_id` and travel with the
- * agent across principal transfers — the principal id from the controller
- * is used only as an ownership-gate to make sure the caller can see the
- * agent before any service call lands. The service layer routes that
- * principal id through {@see \Spora\Services\PrincipalResolver::ownerUserId()}
- * and {@see \Spora\Services\PrincipalResolver::isVisibleTo()} so
- * group-owned agents reach every group member, not just the caller's
- * personal principal.
+ * agent across principal transfers — the principal id from the controller is
+ * used only as an ownership gate, to make sure the caller can see the agent
+ * before any service call lands. The service layer routes that principal id
+ * through {@see \Spora\Services\PrincipalResolver::ownerUserId()} and
+ * {@see \Spora\Services\PrincipalResolver::isVisibleTo()} so group-owned
+ * agents reach every group member, not just the caller's personal principal.
  *
  * The principal itself comes from `?principal_id=` via
- * {@see AbstractMemoryController::requestPrincipalId()} — same convention
- * as the global controller, so the frontend's PrincipalChipRow choice
- * applies uniformly to both `/memories` and `/agents/{id}/memories`.
+ * {@see AbstractMemoryController::requestPrincipalId()} — the same convention
+ * as the global controller, so the frontend's PrincipalChipRow choice applies
+ * uniformly to both `/memories` and `/agents/{id}/memories`.
  */
 final class AgentMemoryController extends AbstractMemoryController
 {

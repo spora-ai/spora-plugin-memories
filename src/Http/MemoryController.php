@@ -14,12 +14,10 @@ use Throwable;
  * and surgical substring replacement.
  *
  * The principal id is resolved once per request via
- * {@see AbstractMemoryController::requestPrincipalId()} — mirroring how
- * the typst and media-archive plugins anchor writes to a principal.
- * When the frontend's `PrincipalChipRow` is on a group principal, the
- * caller sends `?principal_id=<group>` on every request; the resolver
- * honours it when the caller controls it (i.e. is `admin`/`owner` of
- * the group) and 403s otherwise.
+ * {@see AbstractMemoryController::requestPrincipalId()}. When the frontend's
+ * `PrincipalChipRow` is on a group principal, the caller sends
+ * `?principal_id=<group>` on every request; the resolver honours it when the
+ * caller is a member of that group and 403s otherwise.
  */
 final class MemoryController extends AbstractMemoryController
 {

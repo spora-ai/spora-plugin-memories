@@ -9,8 +9,8 @@ use Spora\Apps\VueAppInterface;
 /**
  * Admin-panel metadata for the Memories feature.
  *
- * The host loads the frontend bundle from the plugin slug and entry filename.
- * The entry must match the frontend bundle's `build.lib.fileName()` value.
+ * The entry must match the frontend bundle's `build.lib.fileName()` value —
+ * the host loads the bundle from the plugin slug and that filename.
  */
 final class MemoriesApp implements VueAppInterface
 {
@@ -31,8 +31,7 @@ final class MemoriesApp implements VueAppInterface
 
     public function icon(): string
     {
-        // `brain` is in the bundled icon palette — see spora-core/docs/07_plugins.md
-        // § Bundled icons for the full list.
+        // `brain` is a bundled icon name — see the plugin schema docs for the palette.
         return 'brain';
     }
 

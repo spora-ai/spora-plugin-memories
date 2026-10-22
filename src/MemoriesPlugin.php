@@ -22,18 +22,6 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
  * Plugin entry point for the Memories feature.
- *
- * Schema version 2 introduces four breaking changes versus v1:
- *   1. memories.user_id → memories.principal_id  (post-0067 principal model)
- *   2. auto-increment BIGINT id → UUIDv7 CHAR(36)  (non-enumerable, time-ordered)
- *   3. implicit single-type → explicit `type` ENUM('plan','documentation','examples','context')
- *   4. new `replace` operation on both tools + a new POST .../replace endpoint
- *
- * Contributes one admin app (MemoriesApp), two LLM-callable tools
- * (`memory` agent-scoped, `global_memory` principal-scoped), 14 REST
- * routes under `/api/v1/memories*`, DI bindings for the service and both
- * controllers, the `memories` migrations, and the `memories-assistant`
- * agent template.
  */
 final class MemoriesPlugin extends AbstractPlugin implements EventSubscriberInterface
 {
@@ -47,17 +35,9 @@ final class MemoriesPlugin extends AbstractPlugin implements EventSubscriberInte
     }
 
     /**
-     * Subscribe to the two boot-time events fired by spora-core. Listeners
-     * run on the framework-wide EventDispatcher built by
-     * {@see \Spora\Events\EventDispatcherFactory}.
-     *
-     * - {@see ContainerBuildingEvent} → fires once per process, before the
-     *   DI container is built. {@see self::onContainerBuilding()} adds
-     *   bindings for the plugin's interfaces + controllers so PHP-DI can
-     *   autowire them at request time.
-     * - {@see RoutesRegisteringEvent} → fires per request, after the host
-     *   routes are registered. {@see self::onRoutesRegistering()} adds the
-     *   14 `/api/v1/memories*` routes behind Auth + CSRF.
+     * The two boot-time events: `ContainerBuildingEvent` fires once per
+     * process, before the container is built; `RoutesRegisteringEvent` per
+     * request, after the host's own routes are registered.
      *
      * @return array<class-string, string>
      */
@@ -70,18 +50,17 @@ final class MemoriesPlugin extends AbstractPlugin implements EventSubscriberInte
     }
 
     /**
-     * Wire the service interfaces → concrete class autowire + the two
-     * controllers. Adding explicit bindings here is necessary because the
-     * host `App` does not know about the plugin's memory interfaces;
-     * without these definitions, resolving either controller at
-     * request-dispatch time would fail with `EntryNotFoundException`. The
-     * v2 split registered two narrow interfaces (`MemoryQueryInterface`,
-     * `MemoryCommandInterface`) so each side of the read/write split stays
-     * under Sonar's per-class method-count ceiling — controllers depend
-     * on whichever interfaces they actually call. `PrincipalService` is
-     * already globally registered in spora-core; we re-list it here so
-     * the plugin's container works when loaded standalone (e.g. in unit
-     * tests that skip the host boot path).
+     * The host `App` does not know the plugin's memory interfaces, so these
+     * bindings have to be explicit — resolving a controller without them
+     * fails with `EntryNotFoundException`.
+     *
+     * The read and write contracts stay narrow on purpose: one interface per
+     * side keeps each service class under Sonar's per-class method-count
+     * ceiling, and a controller depends only on the half it calls.
+     *
+     * `PrincipalService` is already registered in spora-core; it is re-listed
+     * here so the plugin's container also resolves when the host boot path is
+     * skipped.
      */
     public function onContainerBuilding(ContainerBuildingEvent $event): void
     {
@@ -97,10 +76,10 @@ final class MemoriesPlugin extends AbstractPlugin implements EventSubscriberInte
     }
 
     /**
-     * Register the 14 `/api/v1/memories*` routes behind Auth + CSRF.
-     * Path strings mirror spora-core's pre-extraction paths verbatim so
-     * the frontend bundle (which has been calling these endpoints since
-     * 0.8.x) Just Works.
+     * The `/api/v1/memories*` routes, behind Auth + CSRF.
+     *
+     * The path strings mirror spora-core's pre-extraction paths verbatim:
+     * the frontend bundle calls them, so they must not change.
      */
     public function onRoutesRegistering(RoutesRegisteringEvent $event): void
     {
@@ -162,5 +141,18 @@ final class MemoriesPlugin extends AbstractPlugin implements EventSubscriberInte
     public function agentTemplatePaths(): array
     {
         return [__DIR__ . '/../agent-templates'];
+    }
+
+    /**
+     * The plugin's `locales/` directory — one `<locale>.json` per language,
+     * keyed by the English source string.
+     *
+     * @return string[]
+     */
+    public function translationsPaths(): array
+    {
+        return [
+            __DIR__ . '/../locales',
+        ];
     }
 }
