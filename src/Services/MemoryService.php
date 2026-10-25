@@ -13,7 +13,14 @@ namespace Spora\Plugins\Memories\Services;
  * code that still references `MemoryService::TYPE_NOT_ALLOWED_CODE` keeps
  * compiling.
  *
- * @deprecated use {@see MemoryTypes} for constants,
+ * Kept for the foreseeable future rather than scheduled for removal: the
+ * shim carries no methods, so it costs the plugin nothing to ship, and
+ * dropping it would break the external code that still compiles against the
+ * old constants. The removal version last promised here — 0.4.0 — came and
+ * went with the shim still shipping, so a new date would be a second promise
+ * the plugin has no plan to keep.
+ *
+ * @deprecated since 0.4.0 — use {@see MemoryTypes} for constants,
  *             {@see MemoryQueryService} / {@see MemoryCommandService}
  *             for the implementations.
  */
