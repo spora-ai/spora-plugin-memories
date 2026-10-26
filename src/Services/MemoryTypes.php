@@ -7,10 +7,9 @@ namespace Spora\Plugins\Memories\Services;
 /**
  * Canonical home for the memory-domain enums and error codes.
  *
- * Lives in its own file so controllers and the HTTP layer can import a
- * single namespace without dragging in the service class — and so the
- * service class the v2 split shrank does not carry the domain constants
- * as well.
+ * Its own file so controllers and the HTTP layer can import a single
+ * namespace without dragging in the service class — the v2 split moved the
+ * constants here, leaving `MemoryService` with only a deprecated shim.
  */
 final class MemoryTypes
 {
