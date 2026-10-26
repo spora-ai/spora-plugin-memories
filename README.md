@@ -21,6 +21,39 @@ Requires `spora-ai/spora-core` ≥ 0.12.0 (when this plugin shipped, the memorie
 - Ships two LLM-callable tools — `memory` (agent-scoped) and `global_memory` (principal-scoped, shared across the principal's agents) — each with `list`, `get`, `save`, `replace`, and `delete` operations. Every memory is tagged with a `type` (`plan` / `documentation` / `examples` / `context`) which is mandatory on save/get/replace. The `replace` op performs an exact substring edit on memory content (errors on zero or non-unique matches). List/get/save auto-approve; replace and delete require user approval.
 - Adds a bundled agent template (`memories-assistant.json`) under the plugin's `agent-templates/` directory, wiring both tools onto the host's default system prompt with explicit guidance on when to use each.
 
+## Translations
+
+This plugin ships a German catalogue at [`locales/de.json`](locales/de.json),
+declared through `translationsPaths()` in `src/MemoriesPlugin.php`. The host
+merges it under core's own catalogue, so a German install reads the plugin's
+operator copy in German.
+
+The **key is the English source string**, byte for byte — editing the English
+in the source changes the key, so the old entry stops matching and the new
+English has no entry. The gate is this repository's own
+`tests/Unit/LocaleCatalogTest.php`: it fails on an empty translation, on a
+translation identical to its key, and on a key the source no longer produces.
+
+**Translated**
+
+- the admin panel's display name and description — `Memories`,
+  `Persistent memory storage for agents and users.`
+- the two tool display names — `Agent Memory`, `Global Memory`
+- the `plugin.json` description
+
+**Never translated** — these strings are read by the model, so the operator
+sees exactly what the model sees:
+
+- `#[Tool].description`
+- `#[ToolOperation].description`
+- `#[ToolParameter].description`
+
+The admin panel's own strings live in the frontend package
+(`spora-ai/spora-plugin-memories-frontend`), which ships its own catalogue —
+this repository's catalogue covers the PHP plugin's copy only.
+
+See the [plugin author guide → Translations](https://docs.spora-ai.com/develop/plugins/author-guide/translations).
+
 ## API surface
 
 After install, 14 endpoints appear under `/api/v1/memories*`. All require `AuthMiddleware` + `CsrfMiddleware`. Every endpoint honours `?principal_id=N` for the `PrincipalChipRow`: omit it for the caller's user-principal, supply it to act on any principal (user or group) the caller controls.
